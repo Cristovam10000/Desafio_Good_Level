@@ -28,11 +28,11 @@ services:
     depends_on:
       - postgres
     volumes:
-      - ./backend/cube:/cube/conf
+      - ../cube:/cube/conf
 
   api:
     build:
-      context: ./backend
+      context: ..
       dockerfile: docker/api.Dockerfile
     container_name: godlevel-api
     environment:
