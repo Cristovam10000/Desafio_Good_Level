@@ -10,8 +10,8 @@ from app.core.config import settings
 # 1) Engine + Session (pool de conexões)
 # -----------------------------------------------------------------------------
 
-_engine = Optional[Engine] = None
-_SessionLocal = Optional[sessionmaker] = None
+_engine: Optional[Engine] = None
+_SessionLocal: Optional[sessionmaker] = None
 
 def get_engine() -> Engine:
     global _engine, _SessionLocal
@@ -48,10 +48,10 @@ def session_scope() -> Generator[Session, None, None]:
         session.close()
 
 def get_session() -> Generator[Session, None, None]:
-    if _SessionLocal in None:
+    if _SessionLocal is None:
         get_engine()
     assert _SessionLocal is not None
-    db:Session = _SessionLocal()
+    db: Session = _SessionLocal()
     try:
         yield db
     finally:
@@ -61,7 +61,7 @@ def get_session() -> Generator[Session, None, None]:
 # 2) Healthcheck (pronto para /healthz e /readyz)
 # -----------------------------------------------------------------------------
 
-def health_check() -> bool:
+def health_check() -> Dict[str, Any]:
     eng = get_engine()
     with eng.connect() as conn:
         conn.execute(text("SELECT 1"))

@@ -1,33 +1,43 @@
-# acrescente ao docker-compose.yml existente
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: godlevel-postgres
+    environment:
+      POSTGRES_DB: challenge_db
+      POSTGRES_USER: challenge
+      POSTGRES_PASSWORD: challenge_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
   cube:
     image: cubejs/cube:latest
     container_name: godlevel-cube
     environment:
       CUBEJS_DB_TYPE: postgres
-      CUBEJS_DB_HOST: postgres           # mesmo serviço do compose
+      CUBEJS_DB_HOST: postgres
       CUBEJS_DB_NAME: challenge_db
       CUBEJS_DB_USER: challenge
       CUBEJS_DB_PASS: challenge_2024
-      CUBEJS_API_SECRET: super_secret_long_123   # defina um segredo forte
+      CUBEJS_API_SECRET: super_secret_long_123
     ports:
-      - "4000:4000"                      # expõe o Cube para sua máquina
+      - "4000:4000"
     depends_on:
       - postgres
     volumes:
-      - ./backend/cube:/cube/conf        # pasta onde ficarão Sales.js etc.
+      - ./backend/cube:/cube/conf
 
   api:
     build:
       context: ./backend
-      dockerfile: docker/api.Dockerfile  # seu Dockerfile da API
+      dockerfile: docker/api.Dockerfile
     container_name: godlevel-api
     environment:
-      # CONECTA NO DB DO COMPOSE PELO NOME DO SERVIÇO:
       DATABASE_URL: postgresql+psycopg://challenge:challenge_2024@postgres:5432/challenge_db
-      # CONECTA NO CUBE PELO NOME DO SERVIÇO:
       CUBE_API_URL: http://cube:4000/cubejs-api
-      # IGUAL AO CUBEJS_API_SECRET
       CUBE_API_TOKEN: super_secret_long_123
       JWT_SECRET: coloque_um_grande_aqui_____________________________
       JWT_REFRESH_SECRET: outro_grande________________________________
@@ -42,3 +52,6 @@
     depends_on:
       - postgres
       - cube
+
+volumes:
+  postgres-data:

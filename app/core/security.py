@@ -31,14 +31,14 @@ class BaseClaims(BaseModel):
     type: tokenType
     exp: int
 
-class AccessClaims(BaseModel):
+class AccessClaims(BaseClaims):
     roles: List[str] = Field(default_factory=list)
     stores: List[int] = Field(default_factory=list)
 
-class RefreshClaims(BaseModel):
+class RefreshClaims(BaseClaims):
     pass
 
-class ShareClaims(BaseModel):
+class ShareClaims(BaseClaims):
     q: Dict[str, Any]
     stores: List[int] = Field(default_factory=list)
     mode: str = "view"
@@ -118,7 +118,7 @@ def decode_refresh_token(token:str) -> RefreshClaims:
     try:
         return RefreshClaims(**data)
     except ValidationError:
-        raise HTTPException(status_code=401, detail="Re")
+        raise HTTPException(status_code=401, detail="Token de refresh invalido.")
 
 def decode_share_token(token:str) -> ShareClaims:
     data = _decode(token, settings.JWT_SHARE_SECRET)
@@ -131,13 +131,13 @@ def decode_share_token(token:str) -> ShareClaims:
 # 6) Dependências do FastAPI para autenticação/autorização
 # -----------------------------------------------------------------------------
 
-def get_current_acess(creds: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> AccessClaims:
+def get_current_access(creds: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> AccessClaims:
     token = creds.credentials
     claims = decode_access_token(token)
     return claims
 
 def require_roles(*allowed_roles: str):
-    def _dep(claims: AccessClaims = Depends(get_current_acess)) -> AccessClaims:
+    def _dep(claims: AccessClaims = Depends(get_current_access)) -> AccessClaims:
         roles = set(map(str.lower, claims.roles or []))
         allowed = set(map(str.lower, allowed_roles))
         if roles.isdisjoint(allowed):

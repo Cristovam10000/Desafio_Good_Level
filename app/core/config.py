@@ -34,14 +34,15 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET", "JWT_REFRESH_SECRET", "JWT_SHARE_SECRET")
     @classmethod
     def _jwt_min_length(cls, v: str) -> str:
-       if v is None or len(v) < 32:
-           raise ValueError("JWT secret deve ter pelo menos 32 caracteres.")
-       
+        if v is None or len(v) < 32:
+            raise ValueError("JWT secret deve ter pelo menos 32 caracteres.")
+        return v
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v):
         if isinstance(v, str):
-            parts = [s.strip() for s in v.split(",") if s.strip()]
+            return [s.strip() for s in v.split(",") if s.strip()]
         return v
     
     class Config:

@@ -7,6 +7,6 @@ router = APIRouter()
 def healthz():
     return {"status": "ok"}
 
-@router.get("/readzy")
+@router.get("/readyz")
 def readyz():
     return health_check()
