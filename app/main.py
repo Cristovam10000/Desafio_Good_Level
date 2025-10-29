@@ -1,26 +1,11 @@
-# backend/app/main.py
-"""
-Ponto de entrada da API (FastAPI).
-
-Responsabilidades:
-- Instanciar FastAPI com título/versão/docs.
-- Aplicar CORS conforme settings (lido de .env).
-- Registrar os routers (health, analytics, specials).
-- Expor rota raiz ("/") com links úteis.
-- Fazer checagens leves no startup (logs de DB/Cube).
-
-Obs.:
-- Rotas de 'share' e outros módulos serão plugadas depois.
-"""
-
 from __future__ import annotations
-
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import analytics, specials, health
+from app.routers.share import router as share_router  # <-- importe o router diretamente
 from app.infra.db import health_check
 from app.infra.cube_client import cube_meta, CubeError
 
@@ -40,7 +25,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------------
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS_LIST,  # ex.: ["http://localhost:5173"]
+        allow_origins=settings.CORS_ORIGINS,  # ex.: ["http://localhost:5173"]
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -52,6 +37,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(analytics.router)
     app.include_router(specials.router)
+    app.include_router(share_router) 
+
     # TODO: app.include_router(share.router)  # quando implementarmos links
 
     # -------------------------------------------------------------------------
