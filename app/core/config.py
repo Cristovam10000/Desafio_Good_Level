@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import List
-from pydantic import BaseSettings
+from typing import List, Optional
 from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # APP
@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_MINUTES: int = 15
     REFRESH_TOKEN_MINUTES: int = 60 * 24 * 7
 
-    # CORS 
-    CORS_ORIGINS: List[str]
+    # CORS (aceita string separada por vírgulas no .env)
+    CORS_ORIGINS: Optional[str] = None
 
     # CACHE HTTP 
     CACHE_MAX_AGE: int = 60 
@@ -38,16 +38,21 @@ class Settings(BaseSettings):
             raise ValueError("JWT secret deve ter pelo menos 32 caracteres.")
         return v
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def _split_cors(cls, v):
+    @property
+    def CORS_ORIGINS_LIST(self) -> List[str]:
+        v = self.CORS_ORIGINS
+        if not v:
+            return []
         if isinstance(v, str):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Pydantic v2 settings configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",  # ignora chaves extras no .env
+    )
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
