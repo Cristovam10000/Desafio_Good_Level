@@ -1,12 +1,9 @@
 
 from __future__ import annotations
 
-import json
-import hashlib
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
-from app.core.config import settings
+from app.core.cache import etag_json
 from app.core.security import (require_roles, AccessClaims, get_share_context)
 from app.domain.catalog import (QueryIn, build_cube_query, catalog_doc)
 from app.infra.cube_client import cube_load, CubeError
@@ -16,34 +13,22 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 # -----------------------------------------------------------------------------
-# Helpers de cache HTTP (ETag + SWR)
-# -----------------------------------------------------------------------------
-
-def _make_etag(body_bytes: bytes) -> str:
-    return hashlib.md5(body_bytes).hexdigest()
-
-
-def _cache_headers(response: JSONResponse, etag: str) -> None:
-    response.headers["ETag"] = etag
-    response.headers[
-        "Cache-Control"
-    ] = f"max-age={settings.CACHE_MAX_AGE}, stale-while-revalidate={settings.CACHE_SWR}"
-    response.headers["Vary"] = "Authorization"
-
-
-# -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
 
 @router.get("/catalog")
-def get_catalog( _user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin"))):
+def get_catalog(
+    request: Request,
+    _user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+):
     doc = catalog_doc()
-    return {
+    payload = {
         "measures": doc.measures,
         "dimensions": doc.dimensions,
         "grains": doc.grains,
         "default_time_dimension": doc.default_time_dimension,
     }
+    return etag_json(request, payload)
 
 
 @router.get("")
@@ -86,20 +71,8 @@ async def analytics(
     # 4) Monta a resposta final (incluindo a query efetiva para transparência)
     payload = {
         "ok": True,
-        "query_effective": cube_query,     
-        "result": cube_result,             
+        "query_effective": cube_query,
+        "result": cube_result,
     }
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
 
-    # 5) ETag + SWR: se If-None-Match bate, devolve 304
-    etag = _make_etag(body)
-    inm = request.headers.get("If-None-Match")
-    if inm and inm == etag:
-        resp = JSONResponse(status_code=304, content=None)
-        _cache_headers(resp, etag)
-        return resp
-
-    # Caso contrário, devolve 200 com corpo + headers de cache
-    resp = JSONResponse(status_code=200, content=payload)
-    _cache_headers(resp, etag)
-    return resp
+    return etag_json(request, payload)

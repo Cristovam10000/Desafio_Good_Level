@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from app.core.config import settings
+from app.core.cache import etag_json
 from app.core.security import (
     require_roles,
     AccessClaims,
@@ -70,14 +70,18 @@ def create_share(body: ShareCreateIn, user: AccessClaims = Depends(require_roles
 
 
 @router.get("/validate", response_model=ShareInspectOut)
-def validate_share(share_token: str = Query(..., description="JWT de link compartilhado")):
+def validate_share(
+    request: Request,
+    share_token: str = Query(..., description="JWT de link compartilhado"),
+):
     try:
         claims = decode_share_token(share_token)
     except HTTPException:
         raise
-    return ShareInspectOut(
+    payload = ShareInspectOut(
         ok=True,
         exp=claims.exp,
         stores=claims.stores or [],
         q=claims.q,
-    )
+    ).model_dump()
+    return etag_json(request, payload)
