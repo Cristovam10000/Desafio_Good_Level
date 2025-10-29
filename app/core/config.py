@@ -10,22 +10,22 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Banco de Dados
-    DATABASE_URL: str = ( "postgresql+psycopg://postgres:postgres@localhost:5432/nola" )
+    DATABASE_URL: str 
 
     # Cube
-    CUBE_API_URL: str = "http://localhost:4000/cubejs-api"
-    CUBE_API_TOKEN: str = "YOUR_CUBE_API_TOKEN"
+    CUBE_API_URL: str 
+    CUBE_API_TOKEN: str 
 
     # JWT
-    JWT_SECRET: str = "your_jwt_secret"
-    JWT_REFRESH_SECRET: str = "your_jwt_refresh_secret"
-    JWT_SHARE_SECRET: str = "your_jwt_share_secret"
+    JWT_SECRET: str 
+    JWT_REFRESH_SECRET: str 
+    JWT_SHARE_SECRET: str 
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_MINUTES: int = 15
     REFRESH_TOKEN_MINUTES: int = 60 * 24 * 7
 
     # CORS 
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: List[str]
 
     # CACHE HTTP 
     CACHE_MAX_AGE: int = 60 
