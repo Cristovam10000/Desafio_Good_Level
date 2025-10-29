@@ -1,0 +1,44 @@
+# acrescente ao docker-compose.yml existente
+
+  cube:
+    image: cubejs/cube:latest
+    container_name: godlevel-cube
+    environment:
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres           # mesmo serviço do compose
+      CUBEJS_DB_NAME: challenge_db
+      CUBEJS_DB_USER: challenge
+      CUBEJS_DB_PASS: challenge_2024
+      CUBEJS_API_SECRET: super_secret_long_123   # defina um segredo forte
+    ports:
+      - "4000:4000"                      # expõe o Cube para sua máquina
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend/cube:/cube/conf        # pasta onde ficarão Sales.js etc.
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: docker/api.Dockerfile  # seu Dockerfile da API
+    container_name: godlevel-api
+    environment:
+      # CONECTA NO DB DO COMPOSE PELO NOME DO SERVIÇO:
+      DATABASE_URL: postgresql+psycopg://challenge:challenge_2024@postgres:5432/challenge_db
+      # CONECTA NO CUBE PELO NOME DO SERVIÇO:
+      CUBE_API_URL: http://cube:4000/cubejs-api
+      # IGUAL AO CUBEJS_API_SECRET
+      CUBE_API_TOKEN: super_secret_long_123
+      JWT_SECRET: coloque_um_grande_aqui_____________________________
+      JWT_REFRESH_SECRET: outro_grande________________________________
+      JWT_SHARE_SECRET: outro_mais___________________________________
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      CACHE_MAX_AGE: "60"
+      CACHE_SWR: "300"
+      ENV: development
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - cube
