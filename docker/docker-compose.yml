@@ -2,7 +2,9 @@ version: "3.9"
 
 services:
   postgres:
-    image: postgres:15-alpine
+    build:
+      context: ..
+      dockerfile: docker/postgres.Dockerfile
     container_name: godlevel-postgres
     environment:
       POSTGRES_DB: challenge_db
@@ -12,6 +14,34 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ../database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U challenge -d challenge_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  data-generator:
+    build:
+      context: ..
+      dockerfile: docker/data-generator.Dockerfile
+    container_name: godlevel-data-gen
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://challenge:challenge_2024@postgres:5432/challenge_db
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        echo 'Generating challenge data...' &&
+        python generate_data.py --db-url postgresql://challenge:challenge_2024@postgres:5432/challenge_db
+      "
+    profiles:
+      - tools
 
   cube:
     image: cubejs/cube:latest
@@ -23,12 +53,33 @@ services:
       CUBEJS_DB_USER: challenge
       CUBEJS_DB_PASS: challenge_2024
       CUBEJS_API_SECRET: super_secret_long_123
+      CUBEJS_CACHE_AND_QUEUE_DRIVER: cubestore
+      CUBEJS_CUBESTORE_HOST: cubestore
+      CUBEJS_CUBESTORE_PORT: 9999
     ports:
       - "4000:4000"
     depends_on:
       - postgres
+      - cubestore
     volumes:
       - ../cube:/cube/conf
+
+  cubestore:
+    image: cubejs/cubestore:latest
+    container_name: godlevel-cubestore
+    environment:
+      CUBESTORE_DATA_DIR: /var/lib/cubestore
+      CUBESTORE_WORKERS: cubestore:10000
+      CUBESTORE_META_PORT: 9999
+      CUBESTORE_WORKER_PORT: 10000
+      CUBESTORE_SERVER_NAME: cubestore
+    volumes:
+      - cubestore-data:/var/lib/cubestore
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9999"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   api:
     build:
@@ -55,3 +106,4 @@ services:
 
 volumes:
   postgres-data:
+  cubestore-data:
