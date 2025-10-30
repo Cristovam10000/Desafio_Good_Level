@@ -230,7 +230,7 @@ def product_top(
 
     # A mv_product_day que criamos é por dia×produto (sem loja).
     # Se quiser ranking por loja, crie outra MV com store_id.
-    where = ["bucket_day >= :start::date", "bucket_day < :end::date"]
+    where = ["bucket_day >= CAST(:start AS date)", "bucket_day < CAST(:end AS date)"]
     params: Dict[str, Any] = {"start": start, "end": end, "limit": limit}
 
     # Caso você tenha evoluído a MV para ter store_id, destrave aqui:
@@ -279,7 +279,7 @@ def delivery_p90(
         start, end = _default_period(days=30)
     _validate_range(start, end)
 
-    where = ["bucket_day >= :start::date", "bucket_day < :end::date"]
+    where = ["bucket_day >= CAST(:start AS date)", "bucket_day < CAST(:end AS date)"]
     params: Dict[str, Any] = {"start": start, "end": end, "limit": limit, "min_deliveries": min_deliveries}
 
     if city:
