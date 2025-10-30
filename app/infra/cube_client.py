@@ -1,8 +1,10 @@
 from __future__ import annotations
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 import httpx
+from jose import jwt
 from app.core.config import settings
 
 
@@ -14,8 +16,30 @@ class CubeError(RuntimeError):
         self.details = details or {}
 
 
+_TOKEN_CACHE: Tuple[str, float] = ("", 0.0)
+
+
+def _cube_token() -> str:
+    global _TOKEN_CACHE
+    token, expires_at = _TOKEN_CACHE
+    now = datetime.now(timezone.utc)
+    now_ts = now.timestamp()
+    # reaproveita token se ainda estiver válido (com 60s de folga)
+    if token and now_ts < (expires_at - 60):
+        return token
+
+    payload = {
+        "iat": int(now_ts),
+        "exp": int((now + timedelta(minutes=30)).timestamp()),
+        "scope": "analytics",
+    }
+    token = jwt.encode(payload, settings.CUBE_API_TOKEN, algorithm="HS256")
+    _TOKEN_CACHE = (token, payload["exp"])
+    return token
+
+
 def _default_headers(request_id: Optional[str] = None) -> Dict[str, str]:
-    headers = {"Authorization": f"Bearer {settings.CUBE_API_TOKEN}"}
+    headers = {"Authorization": f"Bearer {_cube_token()}"}
     if request_id:
         headers["X-Request-Id"] = request_id
     return headers

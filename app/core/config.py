@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     CACHE_MAX_AGE: int = 60 
     CACHE_SWR: int = 300
 
+    # IA / Gemini
+    GOOGLE_API_KEY: Optional[str] = None
+    GEMINI_MODEL_NAME: str = "gemini-2.5-flash"
+    GEMINI_TEMPERATURE: float = 0.2
+    GEMINI_MAX_OUTPUT_TOKENS: int = 1024
+
     @field_validator("JWT_SECRET", "JWT_REFRESH_SECRET", "JWT_SHARE_SECRET")
     @classmethod
     def _jwt_min_length(cls, v: str) -> str:
