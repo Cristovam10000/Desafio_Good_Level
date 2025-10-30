@@ -27,3 +27,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_delivery_addresses_geo
 -- Base: products (nome às vezes entra em ranking/tabela)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_products_name
   ON products (name);
+
+
+
+
