@@ -18,8 +18,15 @@ export type LoginResponse = {
 };
 
 export async function login(data: LoginInput): Promise<LoginResponse> {
-  const response = await http.post<LoginResponse>("/auth/login", data);
-  return response.data;
+  console.log("[auth] login -> payload", data);
+  try {
+    const response = await http.post<LoginResponse>("/auth/login", data);
+    console.log("[auth] login -> response", response.status, response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[auth] login -> error", error);
+    throw error;
+  }
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser> {

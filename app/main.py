@@ -27,12 +27,6 @@ def create_app() -> FastAPI:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    print("CORS allow:", allowed_origins)
-
-    allowed_origins = settings.CORS_ORIGINS_LIST or [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
     logger = logging.getLogger("uvicorn.error")
     logger.info("CORS allow: %s", allowed_origins)
 
