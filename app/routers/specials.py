@@ -1,4 +1,4 @@
-"""Endpoints métricos específicos (materialized views + fallback em tabelas)."""
+﻿"""Endpoints m├®tricos espec├¡ficos (materialized views + fallback em tabelas)."""
 
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ def _parse_iso8601(value: str) -> datetime:
         normalized = value.replace("Z", "+00:00")
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Data/hora inválida: {value}") from exc
+        raise HTTPException(status_code=400, detail=f"Data/hora inv├ílida: {value}") from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
 
 
 def _default_period(days: int = 30) -> tuple[str, str]:
-    """Retorna intervalo padrão (últimos *days*) em string ISO datetime."""
+    """Retorna intervalo padr├úo (├║ltimos *days*) em string ISO datetime."""
     now = datetime.utcnow().replace(tzinfo=timezone.utc)
     start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
     return start.isoformat(), now.isoformat()
@@ -62,13 +62,13 @@ def top_products(
     limit: int = Query(10, ge=1, le=100, description="Quantidade de produtos no ranking"),
     start: Optional[str] = Query(None, description="Data/hora inicial (inclusive)"),
     end: Optional[str] = Query(None, description="Data/hora final (exclusivo)"),
-    offset: int = Query(0, ge=0, description="Offset para paginação"),
-    store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
-    channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
+    offset: int = Query(0, ge=0, description="Offset para pagina├º├úo"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja espec├¡fica"),
+    channel_id: Optional[int] = Query(None, description="Filtrar por canal espec├¡fico"),
 ):
     """
     Ranking simples de produtos vendidos diretamente das tabelas transacionais.
-    Mantido como fallback leve (sem depender de MV específica).
+    Mantido como fallback leve (sem depender de MV espec├¡fica).
     """
     where_clauses = ["s.sale_status_desc = 'COMPLETED'"]
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
@@ -126,7 +126,7 @@ class SalesHourRow(BaseModel):
 
 @router.get("/sales-hour", response_model=List[SalesHourRow])
 def sales_hour(
-    start: Optional[str] = Query(None, description="ISO8601 início (default: agora-30d)"),
+    start: Optional[str] = Query(None, description="ISO8601 in├¡cio (default: agora-30d)"),
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal"),
@@ -213,11 +213,11 @@ class ProductTopRow(BaseModel):
 
 @router.get("/product-top", response_model=List[ProductTopRow])
 def product_top(
-    start: Optional[str] = Query(None, description="ISO8601 início (default: agora-30d)"),
+    start: Optional[str] = Query(None, description="ISO8601 in├¡cio (default: agora-30d)"),
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
     store_id: Optional[int] = Query(None, description="Se MV tiver store_id, filtra por loja"),
     limit: int = Query(50, ge=1, le=500),
-    order_by: str = Query("revenue", pattern="^(revenue|qty|orders)$", description="Campo de ordenação"),
+    order_by: str = Query("revenue", pattern="^(revenue|qty|orders)$", description="Campo de ordena├º├úo"),
     direction: str = Query("DESC", pattern="^(ASC|DESC)$"),
 ):
     if not start or not end:
@@ -262,10 +262,10 @@ class DeliveryP90Row(BaseModel):
 
 @router.get("/delivery-p90", response_model=List[DeliveryP90Row])
 def delivery_p90(
-    start: Optional[str] = Query(None, description="ISO8601 início (default: agora-30d)"),
+    start: Optional[str] = Query(None, description="ISO8601 in├¡cio (default: agora-30d)"),
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
     city: Optional[str] = Query(None, description="Filtrar por cidade"),
-    min_deliveries: int = Query(20, ge=1, le=1000, description="Mínimo de entregas p/ exibir linha"),
+    min_deliveries: int = Query(20, ge=1, le=1000, description="M├¡nimo de entregas p/ exibir linha"),
     limit: int = Query(200, ge=1, le=5000),
 ):
     if not start or not end:
@@ -297,6 +297,32 @@ def delivery_p90(
 
 
 # -----------------------------------------------------------------------------
+# Channels metadata
+# -----------------------------------------------------------------------------
+
+
+class ChannelRow(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    type: Optional[str] = None
+
+
+@router.get("/channels", response_model=List[ChannelRow])
+def list_channels():
+    sql = """
+        SELECT
+          id,
+          name,
+          description,
+          type
+        FROM channels
+        ORDER BY name ASC
+    """
+    return fetch_all(sql, timeout_ms=1000)
+
+
+# -----------------------------------------------------------------------------
 # Refresh manual das materialized views
 # -----------------------------------------------------------------------------
 
@@ -310,12 +336,12 @@ class RefreshOut(BaseModel):
 def refresh_mv(
     which: Optional[List[str]] = Query(None, description="Lista de MVs para refresh. Vazio = todas."),
 ):
-    """Permite forçar o REFRESH (concurrent) das MVs utilizadas pelos endpoints."""
+    """Permite for├ºar o REFRESH (concurrent) das MVs utilizadas pelos endpoints."""
     known = {"mv_sales_hour", "mv_product_day", "mv_delivery_p90"}
     requested = known if not which else set(which)
     invalid = requested - known
     if invalid:
-        raise HTTPException(status_code=400, detail=f"MVs inválidas: {sorted(invalid)}")
+        raise HTTPException(status_code=400, detail=f"MVs inv├ílidas: {sorted(invalid)}")
 
     for name in sorted(requested):
         refresh_materialized_views(name, concurrently=True)

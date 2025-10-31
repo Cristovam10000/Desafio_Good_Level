@@ -1,10 +1,10 @@
 from __future__ import annotations
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import analytics, specials, health
+from app.routers import analytics, auth, specials, health
 from app.routers.share import router as share_router
 from app.infra.db import health_check
 from app.infra.cube_client import cube_meta, CubeError
@@ -23,18 +23,56 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------------
     # CORS (origens permitidas vêm do .env -> settings.CORS_ORIGINS)
     # -------------------------------------------------------------------------
+    allowed_origins = settings.CORS_ORIGINS_LIST or [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    print("CORS allow:", allowed_origins)
+
+    allowed_origins = settings.CORS_ORIGINS_LIST or [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    logger = logging.getLogger("uvicorn.error")
+    logger.info("CORS allow: %s", allowed_origins)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS_LIST or ["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.state.cors_allowed_origins = allowed_origins
+
+    @app.middleware("http")
+    async def _log_auth_requests(request: Request, call_next):
+        if request.url.path.startswith("/auth"):
+            logger.info(
+                "AUTH inbound | method=%s path=%s origin=%s referer=%s headers=%s",
+                request.method,
+                request.url.path,
+                request.headers.get("origin"),
+                request.headers.get("referer"),
+                {k: v for k, v in request.headers.items() if k in {"origin", "referer", "content-type", "host"}},
+            )
+        response = await call_next(request)
+        if request.url.path.startswith("/auth"):
+            logger.info(
+                "AUTH outbound | method=%s path=%s status=%s acao=%s vary=%s",
+                request.method,
+                request.url.path,
+                response.status_code,
+                response.headers.get("access-control-allow-origin"),
+                response.headers.get("vary"),
+            )
+        return response
 
     # -------------------------------------------------------------------------
     # Routers (ordem não importa; /healthz e /readyz primeiro por conveniência)
     # -------------------------------------------------------------------------
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(analytics.router)
     app.include_router(specials.router)
     app.include_router(share_router)
@@ -51,6 +89,14 @@ def create_app() -> FastAPI:
             "openapi": "/openapi.json",
             "healthz": "/healthz",
             "readyz": "/readyz",
+        }
+
+    @app.get("/__debug/cors")
+    def debug_cors(request: Request):
+        return {
+            "allowed_origins": app.state.cors_allowed_origins,
+            "request_origin": request.headers.get("origin"),
+            "request_referer": request.headers.get("referer"),
         }
 
     # -------------------------------------------------------------------------
