@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import analytics, specials, health
-from app.routers.share import router as share_router  # <-- importe o router diretamente
+from app.routers.share import router as share_router
 from app.infra.db import health_check
 from app.infra.cube_client import cube_meta, CubeError
 
@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------------
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,  # ex.: ["http://localhost:5173"]
+        allow_origins=settings.CORS_ORIGINS,  
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -37,9 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(analytics.router)
     app.include_router(specials.router)
-    app.include_router(share_router) 
-
-    # TODO: app.include_router(share.router)  # quando implementarmos links
+    app.include_router(share_router)
 
     # -------------------------------------------------------------------------
     # Rota raiz para conveniência (links rápidos)

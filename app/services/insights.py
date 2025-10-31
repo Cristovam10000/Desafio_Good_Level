@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+"""
+Service layer responsável por montar datasets analíticos e solicitar insights
+ao modelo do Gemini.
+"""
+
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Dict, Optional
 
 import pandas as pd
 
-from app.infra.db import fetch_all
-from app.core.ai import generate_insights_text
 from sqlalchemy.exc import ProgrammingError
+
+from app.core.ai import generate_insights_text
+from app.infra.db import fetch_all
 
 
 def _parse_date(value: str) -> date:
+    """Parseia strings ISO (aceitando 'Z') para objetos date."""
     try:
         normalized = value.strip()
         normalized = normalized.replace("Z", "+00:00")
@@ -22,6 +29,7 @@ def _parse_date(value: str) -> date:
 
 
 def _start_end(start: str, end: str) -> tuple[datetime, datetime]:
+    """Normaliza datas de entrada para intervalo datetime exclusivo no fim."""
     start_date = _parse_date(start)
     end_date = _parse_date(end)
     if start_date >= end_date:
@@ -38,6 +46,7 @@ def _fetch_sales_daily(
     store_ids: Optional[list[int]],
     channel_id: Optional[int],
 ) -> pd.DataFrame:
+    """Values agregados por dia usando `mv_sales_hour` ou fallback bruto."""
     where_mv = ["bucket_hour >= :start_dt", "bucket_hour < :end_dt"]
     params: Dict[str, object] = {
         "start_dt": start_dt.isoformat(),
@@ -105,6 +114,7 @@ def _fetch_top_products(
     limit: int,
     store_ids: Optional[list[int]],
 ) -> pd.DataFrame:
+    """Lista produtos mais relevantes usando MV ou fallback por tabela."""
     if store_ids:
         sql = """
         SELECT
@@ -187,6 +197,7 @@ def _fetch_delivery_stats(
     city: Optional[str],
     store_ids: Optional[list[int]],
 ) -> pd.DataFrame:
+    """Estatísticas de entrega (p90) com fallback caso MV não exista."""
     if store_ids:
         where = [
             "s.sale_status_desc = 'COMPLETED'",
@@ -288,6 +299,7 @@ def _fetch_delivery_stats(
 
 @dataclass
 class InsightsDataset:
+    """Estrutura consolidada com todos os recortes que vão para a IA."""
     sales_daily: pd.DataFrame
     top_products: pd.DataFrame
     delivery_stats: pd.DataFrame
@@ -333,6 +345,7 @@ def build_dataset(
     top_products: int,
     top_locations: int,
 ) -> InsightsDataset:
+    """Carrega todos os recortes necessários para gerar insights."""
     start_dt, end_dt = _start_end(start, end)
 
     sales_daily = _fetch_sales_daily(start_dt, end_dt, store_ids, channel_id)
@@ -359,11 +372,13 @@ def _extract_bullets(text: str) -> list[str]:
 
 
 async def generate_dataset_insights(dataset: InsightsDataset) -> Dict[str, object]:
+    """Chama o Gemini e transforma a resposta em bullet list + texto bruto."""
     prompt_payload = dataset.to_prompt_payload()
     raw_text = await generate_insights_text(prompt_payload)
+    raw_text = raw_text or ""
     bullets = _extract_bullets(raw_text)
     if not bullets:
-        bullets = [raw_text]
+        bullets = ["Modelo não retornou texto suficiente para análise."]
     return {
         "insights": bullets,
         "raw_text": raw_text,

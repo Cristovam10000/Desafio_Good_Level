@@ -1,26 +1,33 @@
+"""Endpoints para criação e validação de links compartilháveis."""
+
 from __future__ import annotations
+
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+
 from app.core.cache import etag_json
 from app.core.security import (
-    require_roles,
     AccessClaims,
     create_share_token,
     decode_share_token,
+    require_roles,
 )
 from app.domain.catalog import QueryIn
+
 
 router = APIRouter(prefix="/share", tags=["share"])
 
 
-# -----------------------------------------------------------------------------
-# Models (entrada/saída)
-# -----------------------------------------------------------------------------
-
 class ShareCreateIn(BaseModel):
+    """Payload esperado pela criação de share-links."""
+
     q: QueryIn
-    stores: Optional[List[int]] = Field(default=None, description="Subconjunto de lojas do usuário")
+    stores: Optional[List[int]] = Field(
+        default=None,
+        description="Subconjunto de lojas habilitadas no link (padrão: todas do usuário).",
+    )
 
 
 class ShareCreateOut(BaseModel):
@@ -36,34 +43,29 @@ class ShareInspectOut(BaseModel):
     q: dict
 
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
-
 def _validate_subset(user_store_ids: List[int], requested: Optional[List[int]]) -> List[int]:
+    """Certifica que as lojas solicitadas são subconjunto das lojas do token."""
     base = set(user_store_ids or [])
     if requested is None:
         return sorted(base)
-    req = set(requested)
-    if not req.issubset(base):
-        raise HTTPException(status_code=403, detail="Escopo de lojas inválido: não é subconjunto do usuário.")
-    return sorted(req)
+    requested_set = set(requested)
+    if not requested_set.issubset(base):
+        raise HTTPException(
+            status_code=403,
+            detail="Escopo de lojas inválido: não é subconjunto do usuário.",
+        )
+    return sorted(requested_set)
 
-
-# -----------------------------------------------------------------------------
-# Endpoints
-# -----------------------------------------------------------------------------
 
 @router.post("", response_model=ShareCreateOut)
-def create_share(body: ShareCreateIn, user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin"))):
-
-    # 1) Validação de QueryIn já é garantida pelo Pydantic (catalog.py).
+def create_share(
+    body: ShareCreateIn,
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+):
+    """Emite um JWT com a query travada para uso em links compartilháveis."""
     stores = _validate_subset(user_store_ids=user.stores or [], requested=body.stores)
-
-    # 2) Emitir JWT de share travando q + stores
     token = create_share_token(query_lock=body.q.model_dump(by_alias=True), stores=stores)
 
-    # 3) Devolver token e um caminho pronto para ser anexado na UI
     link_path = "/analytics"
     link_with_token = f"{link_path}?share_token={token}"
     return ShareCreateOut(token=token, link_path=link_path, link_with_token=link_with_token)
@@ -74,10 +76,8 @@ def validate_share(
     request: Request,
     share_token: str = Query(..., description="JWT de link compartilhado"),
 ):
-    try:
-        claims = decode_share_token(share_token)
-    except HTTPException:
-        raise
+    """Decodifica o token e devolve seu conteúdo (útil para tooling/UI)."""
+    claims = decode_share_token(share_token)
     payload = ShareInspectOut(
         ok=True,
         exp=claims.exp,
