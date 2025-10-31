@@ -115,7 +115,7 @@ def setup_base_data(conn):
         )
 
     conn.commit()
-    print(f"✓ Base data: {len(sub_brand_ids)} sub-brands, {len(channel_ids)} channels")
+    print(f"[ok] Base data: {len(sub_brand_ids)} sub-brands, {len(channel_ids)} channels")
     return sub_brand_ids, channel_ids
 
 
@@ -157,7 +157,7 @@ def generate_stores(conn, sub_brand_ids, num_stores=50):
         stores.append(cursor.fetchone()[0])
 
     conn.commit()
-    print(f"✓ {len(stores)} stores created")
+    print(f"[ok] {len(stores)} stores created")
     return stores
 
 
@@ -252,7 +252,7 @@ def generate_products_and_items(conn, sub_brand_ids, num_products=500, num_items
         option_groups.append(cursor.fetchone()[0])
 
     conn.commit()
-    print(f"✓ {len(products)} products, {len(items)} items, {len(option_groups)} option groups")
+    print(f"[ok] {len(products)} products, {len(items)} items, {len(option_groups)} option groups")
     return products, items, option_groups
 
 
@@ -283,7 +283,7 @@ def generate_customers(conn, num_customers=10000):
     customer_ids = [row[0] for row in cursor.fetchall()]
 
     conn.commit()
-    print(f"✓ {len(customer_ids)} customers created")
+    print(f"[ok] {len(customer_ids)} customers created")
     return customer_ids
 
 
@@ -350,9 +350,9 @@ def generate_sales(conn, stores, channels, products, items, option_groups, custo
         current_date += timedelta(days=1)
 
         if current_date.day == 1:
-            print(f"  → {current_date.strftime('%B %Y')}: {total_sales:,} sales")
+            print(f"  -> {current_date.strftime('%B %Y')}: {total_sales:,} sales")
 
-    print(f"✓ {total_sales:,} total sales generated")
+    print(f"[ok] {total_sales:,} total sales generated")
     return total_sales
 
 
@@ -606,7 +606,7 @@ def create_indexes(conn):
             pass
 
     conn.commit()
-    print("✓ Indexes created")
+    print("[ok] Indexes created")
 
 
 def main():
@@ -656,7 +656,7 @@ def main():
 
         print()
         print("=" * 70)
-        print("✓ Data generation complete!")
+        print("[ok] Data generation complete!")
         print(f"  Stores: {len(stores):,}")
         print(f"  Products: {len(products):,}")
         print(f"  Items/Complements: {len(items):,}")
@@ -677,3 +677,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

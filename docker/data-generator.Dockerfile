@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY generate_data.py ./generate_data.py
+COPY tools/generate_data.py ./generate_data.py
 
 RUN pip install --no-cache-dir \
     faker==25.8.0 \
