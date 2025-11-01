@@ -18,6 +18,14 @@ type DataPoint = {
 };
 
 export default function ProductsByTime({ data }: { data: DataPoint[] }) {
+  if (data.length === 0) {
+    return (
+      <Card className="p-4 h-full grid place-items-center text-sm text-muted-foreground">
+        Nenhum dado disponível para o período selecionado.
+      </Card>
+    );
+  }
+
   return (
     <Card className="p-4">
       <h3 className="text-lg font-semibold mb-4">Vendas por hora</h3>

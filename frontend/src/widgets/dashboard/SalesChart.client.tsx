@@ -20,38 +20,45 @@ type SalesChartProps = {
 };
 
 export default function SalesChart({ data, title, showComparison = false }: SalesChartProps) {
+  const hasData = data.length > 0;
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-6">{title}</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" />
-          <YAxis />
-          <Tooltip />
-          <Area
-            type="monotone"
-            dataKey="current"
-            name="Período ativo"
-            stroke="hsl(var(--chart-1))"
-            fill="hsl(var(--chart-1) / 0.25)"
-            strokeWidth={3}
-            dot={false}
-          />
-          {showComparison && (
+      {hasData ? (
+        <ResponsiveContainer width="100%" height={300}>
+          <AreaChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
             <Area
               type="monotone"
-              dataKey="previous"
-              name="Período anterior"
-              stroke="hsl(var(--chart-2))"
-              fill="hsl(var(--chart-2) / 0.2)"
-              strokeWidth={2}
-              strokeDasharray="5 5"
+              dataKey="current"
+              name="Período ativo"
+              stroke="hsl(var(--chart-1))"
+              fill="hsl(var(--chart-1) / 0.25)"
+              strokeWidth={3}
               dot={false}
             />
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
+            {showComparison && (
+              <Area
+                type="monotone"
+                dataKey="previous"
+                name="Período anterior"
+                stroke="hsl(var(--chart-2))"
+                fill="hsl(var(--chart-2) / 0.2)"
+                strokeWidth={2}
+                strokeDasharray="5 5"
+                dot={false}
+              />
+            )}
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="h-[300px] grid place-items-center text-sm text-muted-foreground border border-dashed rounded-md">
+          Nenhum dado disponível para o período selecionado.
+        </div>
+      )}
     </Card>
   );
 }

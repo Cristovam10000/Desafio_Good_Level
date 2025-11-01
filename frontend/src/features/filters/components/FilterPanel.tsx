@@ -6,18 +6,24 @@ import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Calendar, RefreshCw, TrendingUp } from "lucide-react";
 import type { IsoRange } from "@/shared/lib/date";
-import type { ChannelRow } from "@/shared/api/specials";
 
 export type PeriodOption = "today" | "7days" | "30days" | "90days" | "custom";
+
+export type ChannelFilterOption = {
+  key: string;
+  label: string;
+  ids: number[];
+  count: number;
+};
 
 type FilterPanelProps = {
   period: PeriodOption;
   range: IsoRange;
   onPeriodChange: (value: PeriodOption) => void;
   onCustomRangeChange: (range: IsoRange) => void;
-  channelId: number | null;
-  onChannelChange: (value: number | null) => void;
-  channels: ChannelRow[];
+  channelOption: ChannelFilterOption | null;
+  onChannelChange: (option: ChannelFilterOption | null) => void;
+  channels: ChannelFilterOption[];
   isChannelLoading: boolean;
   onRefresh: () => void;
 };
@@ -35,7 +41,7 @@ export default function FilterPanel({
   range,
   onPeriodChange,
   onCustomRangeChange,
-  channelId,
+  channelOption,
   onChannelChange,
   channels,
   isChannelLoading,
@@ -54,8 +60,6 @@ export default function FilterPanel({
     const start = range.start > end ? end : range.start;
     onCustomRangeChange({ start, end });
   };
-
-  const uniqueChannels = [...channels].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <Card className="p-3 bg-card/70 border-border/40 shadow-sm">
@@ -95,18 +99,30 @@ export default function FilterPanel({
         )}
 
         <Select
-          value={channelId != null ? String(channelId) : "all"}
-          onValueChange={(value) => onChannelChange(value === "all" ? null : Number(value))}
+          value={channelOption ? channelOption.key : "all"}
+          onValueChange={(value) => {
+            if (value === "all") {
+              onChannelChange(null);
+            } else {
+              const option = channels.find((item) => item.key === value);
+              onChannelChange(option ?? null);
+            }
+          }}
           disabled={isChannelLoading}
         >
           <SelectTrigger className="w-[200px] bg-background text-sm">
-            <SelectValue placeholder="Canal" />
+            <SelectValue placeholder="Todos os canais" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os canais</SelectItem>
-            {uniqueChannels.map((channel) => (
-              <SelectItem key={channel.id} value={String(channel.id)}>
-                {channel.name} <span className="text-xs text-muted-foreground">#{channel.id}</span>
+            {channels.map((channel) => (
+              <SelectItem key={channel.key} value={channel.key}>
+                <span className="flex items-center gap-2">
+                  <span>{channel.label}</span>
+                  {channel.count > 1 && (
+                    <span className="text-[10px] text-muted-foreground bg-muted/70 rounded px-1">{channel.count}</span>
+                  )}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>

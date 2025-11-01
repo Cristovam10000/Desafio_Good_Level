@@ -36,6 +36,7 @@ export async function fetchInsights(params: {
   end?: string;
   store_id?: number;
   channel_id?: number;
+  channel_ids?: string;
   city?: string;
 }): Promise<AnalyticsInsightsResponse> {
   const response = await http.get("/analytics/insights", { params });

@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, addDays, differenceInCalendarDays, subDays, formatISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
-import FilterPanel, { PeriodOption } from "@/features/filters/components/FilterPanel";
+import FilterPanel, { PeriodOption, ChannelFilterOption } from "@/features/filters/components/FilterPanel";
 import { fetchInsights } from "@/shared/api/analytics";
 import { fetchChannels, fetchSalesHour } from "@/shared/api/specials";
 import { useAuth } from "@/shared/hooks/useAuth";
@@ -100,7 +100,7 @@ export default function DashboardPage() {
 
   const [period, setPeriod] = useState<PeriodOption>("7days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("today"));
-  const [channelFilter, setChannelFilter] = useState<number | null>(null);
+  const [channelFilter, setChannelFilter] = useState<ChannelFilterOption | null>(null);
 
   const displayRange = useMemo<IsoRange>(() => {
     if (period === "custom") {
@@ -142,9 +142,24 @@ export default function DashboardPage() {
     setPeriod("custom");
   }, []);
 
-  const handleChannelChange = useCallback((value: number | null) => {
-    setChannelFilter(value);
+  const handleChannelChange = useCallback((option: ChannelFilterOption | null) => {
+    setChannelFilter(option);
   }, []);
+
+  const channelKey = useMemo(() => {
+    if (!channelFilter) {
+      return "all";
+    }
+    const ids = [...channelFilter.ids].sort((a, b) => a - b);
+    return `group-${ids.join("-")}`;
+  }, [channelFilter]);
+
+  const channelIdsParam = useMemo(() => {
+    if (!channelFilter) {
+      return undefined;
+    }
+    return channelFilter.ids.join(",");
+  }, [channelFilter]);
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["analytics", "insights"] });
@@ -153,35 +168,50 @@ export default function DashboardPage() {
   }, [queryClient]);
 
   const insightsQuery = useQuery({
-    queryKey: ["analytics", "insights", apiRange.start, apiRange.end, channelFilter],
-    queryFn: () =>
-      fetchInsights({
+    queryKey: ["analytics", "insights", apiRange.start, apiRange.end, channelKey],
+    queryFn: () => {
+      console.log('[Dashboard] Fetching insights:', { 
+        start: apiRange.start, 
+        end: apiRange.end, 
+        channelIds: channelIdsParam,
+        isAuthenticated,
+        isReady 
+      });
+      return fetchInsights({
         start: apiRange.start,
         end: apiRange.end,
-        ...(channelFilter != null ? { channel_id: channelFilter } : {}),
-      }),
+        ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+      });
+    },
     enabled: isAuthenticated && isReady,
   });
 
   const previousInsightsQuery = useQuery({
-    queryKey: ["analytics", "insights", "previous", previousApiRange.start, previousApiRange.end, channelFilter],
+    queryKey: [
+      "analytics",
+      "insights",
+      "previous",
+      previousApiRange.start,
+      previousApiRange.end,
+      channelKey,
+    ],
     queryFn: () =>
       fetchInsights({
         start: previousApiRange.start,
         end: previousApiRange.end,
-        ...(channelFilter != null ? { channel_id: channelFilter } : {}),
+        ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
       }),
     enabled: isAuthenticated && isReady,
   });
 
   const salesHourQuery = useQuery({
-    queryKey: ["specials", "sales-hour", displayRange.start, displayRange.end, channelFilter],
+    queryKey: ["specials", "sales-hour", displayRange.start, displayRange.end, channelKey],
     queryFn: () => {
       const dtRange = expandToDateTime(displayRange);
       return fetchSalesHour({
         start: dtRange.start,
         end: dtRange.end,
-        ...(channelFilter != null ? { channel_id: channelFilter } : {}),
+        ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
       });
     },
     enabled: isAuthenticated && isReady,
@@ -194,9 +224,61 @@ export default function DashboardPage() {
     enabled: isAuthenticated && isReady,
   });
 
+  const channelOptions = useMemo<ChannelFilterOption[]>(() => {
+    const groups = new Map<string, ChannelFilterOption>();
+    channelsQuery.data?.forEach((channel) => {
+      const key = channel.name.trim().toLowerCase();
+      const existing = groups.get(key);
+      if (existing) {
+        existing.ids.push(channel.id);
+        existing.count += 1;
+        existing.label = channel.name; // keep latest formatting (with accents)
+      } else {
+        groups.set(key, {
+          key,
+          label: channel.name,
+          ids: [channel.id],
+          count: 1,
+        });
+      }
+    });
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [channelsQuery.data]);
+
+  useEffect(() => {
+    if (channelFilter && !channelOptions.some((option) => option.key === channelFilter.key)) {
+      setChannelFilter(null);
+    }
+  }, [channelFilter, channelOptions]);
+
+  console.log('[Dashboard] Auth status:', {
+    isReady,
+    isAuthenticated,
+    hasAuth: !!auth,
+    authUser: auth?.user?.email,
+    authStores: auth?.user?.stores,
+    expiresAt: auth?.expiresAt
+  });
+
+  console.log('[Dashboard] Insights query status:', {
+    isLoading: insightsQuery.isLoading,
+    isError: insightsQuery.isError,
+    error: insightsQuery.error,
+    errorDetails: (insightsQuery.error as any)?.issues ? JSON.stringify((insightsQuery.error as any).issues, null, 2) : null,
+    hasData: !!insightsQuery.data,
+    enabled: isAuthenticated && isReady
+  });
+
+  const insightsData = insightsQuery.data ?? insightsQuery.previousData;
+  const previousInsightsData = previousInsightsQuery.data ?? previousInsightsQuery.previousData;
+
   const metrics = useMemo(() => {
-    const currentSales = (insightsQuery.data?.preview.sales_daily ?? []).slice().sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
-    const previousSales = (previousInsightsQuery.data?.preview.sales_daily ?? []).slice().sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
+    const currentSales = (insightsData?.preview.sales_daily ?? [])
+      .slice()
+      .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
+    const previousSales = (previousInsightsData?.preview.sales_daily ?? [])
+      .slice()
+      .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
 
     const currentRevenue = sum(currentSales.map((item) => item.revenue ?? 0));
     const previousRevenue = sum(previousSales.map((item) => item.revenue ?? 0));
@@ -206,10 +288,14 @@ export default function DashboardPage() {
     const currentAvgTicket = currentOrders > 0 ? currentRevenue / currentOrders : 0;
     const previousAvgTicket = previousOrders > 0 ? previousRevenue / previousOrders : 0;
 
-    const deliveryStats = insightsQuery.data?.preview.delivery_stats ?? [];
-    const prevDeliveryStats = previousInsightsQuery.data?.preview.delivery_stats ?? [];
-    const currentAvgDelivery = deliveryStats.length ? sum(deliveryStats.map((item) => item.avg_delivery_minutes)) / deliveryStats.length : 0;
-    const previousAvgDelivery = prevDeliveryStats.length ? sum(prevDeliveryStats.map((item) => item.avg_delivery_minutes)) / prevDeliveryStats.length : null;
+    const deliveryStats = insightsData?.preview.delivery_stats ?? [];
+    const prevDeliveryStats = previousInsightsData?.preview.delivery_stats ?? [];
+    const currentAvgDelivery = deliveryStats.length
+      ? sum(deliveryStats.map((item) => item.avg_delivery_minutes)) / deliveryStats.length
+      : 0;
+    const previousAvgDelivery = prevDeliveryStats.length
+      ? sum(prevDeliveryStats.map((item) => item.avg_delivery_minutes)) / prevDeliveryStats.length
+      : null;
 
     return {
       revenue: currentRevenue,
@@ -225,34 +311,27 @@ export default function DashboardPage() {
           : null,
       chartCurrent: currentSales,
       chartPrevious: previousSales,
-      insights: insightsQuery.data?.insights ?? [],
+      insights: insightsData?.insights ?? [],
     };
-  }, [insightsQuery.data, previousInsightsQuery.data]);
+  }, [insightsData, previousInsightsData]);
 
   const chartData = useMemo(() => {
     const previous = metrics.chartPrevious ?? [];
     return (metrics.chartCurrent ?? []).map((point, index) => ({
-      name: format(parseISO(point.bucket_day), "EEE", { locale: ptBR }),
+      name: format(parseISO(point.bucket_day), "dd/MM", { locale: ptBR }),
       current: point.revenue ?? 0,
       previous: previous[index]?.revenue ?? null,
     }));
   }, [metrics.chartCurrent, metrics.chartPrevious]);
 
   const channelData = useMemo(() => {
-    const channels = new Map<number, string>();
-    channelsQuery.data?.forEach((channel) => {
-      channels.set(channel.id, channel.name);
-    });
-
     const totals = new Map<string, { id: string; name: string; value: number }>();
     salesHourQuery.data?.forEach((row) => {
-      if (row.channel_id == null) {
-        return;
-      }
-      const channelId = row.channel_id;
-      const name = channels.get(channelId) ?? `Canal ${channelId}`;
+      if (row.channel_id == null) return;
+      const channel = channelsQuery.data?.find((ch) => ch.id === row.channel_id);
+      const name = channel?.name ?? `Canal ${row.channel_id}`;
       const key = name.toLowerCase();
-      const current = totals.get(key) ?? { id: String(channelId), name, value: 0 };
+      const current = totals.get(key) ?? { id: String(row.channel_id), name, value: 0 };
       totals.set(key, {
         id: current.id,
         name,
@@ -299,23 +378,23 @@ export default function DashboardPage() {
             range={displayRange}
             onPeriodChange={handlePeriodChange}
             onCustomRangeChange={handleCustomRangeChange}
-            channelId={channelFilter}
+            channelOption={channelFilter}
             onChannelChange={handleChannelChange}
-            channels={channelsQuery.data ?? []}
+            channels={channelOptions}
             isChannelLoading={channelsQuery.isLoading}
             onRefresh={handleRefresh}
           />
         </div>
 
-        {insightsQuery.isError && (
+        {insightsQuery.isError && !insightsData && (
           <div className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             Nao foi possivel carregar os dados do dashboard. Tente novamente mais tarde.
           </div>
         )}
 
-        {insightsQuery.data?.insights_error && !insightsQuery.isError && (
+        {insightsData?.insights_error && (
           <div className="mb-6 rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {insightsQuery.data.insights_error}
+            {insightsData.insights_error}
           </div>
         )}
 
