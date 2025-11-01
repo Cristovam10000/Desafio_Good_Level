@@ -5,8 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, addDays, differenceInCalendarDays, subDays, formatISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import FilterPanel, { PeriodOption, ChannelFilterOption } from "@/features/filters/components/FilterPanel";
-import { fetchInsights } from "@/shared/api/analytics";
-import { fetchChannels, fetchSalesHour } from "@/shared/api/specials";
+import { fetchInsights, fetchMetrics } from "@/shared/api/analytics";
+import { fetchChannels, fetchSalesHour, fetchDataRange } from "@/shared/api/specials";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
 import { IsoRange, expandToDateTime } from "@/shared/lib/date";
@@ -163,20 +163,49 @@ export default function DashboardPage() {
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["analytics", "insights"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics", "metrics"] });
     queryClient.invalidateQueries({ queryKey: ["analytics", "insights", "previous"] });
     queryClient.invalidateQueries({ queryKey: ["specials", "sales-hour"] });
   }, [queryClient]);
 
+  // Query RÁPIDA para métricas do dashboard (sem IA)
+  const metricsQuery = useQuery({
+    queryKey: ["analytics", "metrics", apiRange.start, apiRange.end, channelKey],
+    queryFn: () => {
+      console.log('[Dashboard] Fetching metrics:', {
+        start: apiRange.start,
+        end: apiRange.end,
+        channel_ids: channelIdsParam,
+      });
+      return fetchMetrics({
+        start: apiRange.start,
+        end: apiRange.end,
+        ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+      });
+    },
+    enabled: isAuthenticated && isReady,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+
+  const previousMetricsQuery = useQuery({
+    queryKey: ["analytics", "metrics", "previous", previousApiRange.start, previousApiRange.end, channelKey],
+    queryFn: () => {
+      return fetchMetrics({
+        start: previousApiRange.start,
+        end: previousApiRange.end,
+        ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+      });
+    },
+    enabled: isAuthenticated && isReady,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  // Query LENTA para insights de IA (opcional)
   const insightsQuery = useQuery({
     queryKey: ["analytics", "insights", apiRange.start, apiRange.end, channelKey],
     queryFn: () => {
-      console.log('[Dashboard] Fetching insights:', { 
-        start: apiRange.start, 
-        end: apiRange.end, 
-        channelIds: channelIdsParam,
-        isAuthenticated,
-        isReady 
-      });
       return fetchInsights({
         start: apiRange.start,
         end: apiRange.end,
@@ -184,30 +213,8 @@ export default function DashboardPage() {
       });
     },
     enabled: isAuthenticated && isReady,
-    staleTime: 5 * 60 * 1000, // 5 minutos - dados ficam frescos sem refetch
-    gcTime: 10 * 60 * 1000, // 10 minutos - mantém em cache
-    placeholderData: (previousData) => previousData, // Mantém dados anteriores durante refetch
-  });
-
-  const previousInsightsQuery = useQuery({
-    queryKey: [
-      "analytics",
-      "insights",
-      "previous",
-      previousApiRange.start,
-      previousApiRange.end,
-      channelKey,
-    ],
-    queryFn: () =>
-      fetchInsights({
-        start: previousApiRange.start,
-        end: previousApiRange.end,
-        ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
-      }),
-    enabled: isAuthenticated && isReady,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    placeholderData: (previousData) => previousData,
+    staleTime: 2 * 60 * 1000, // 2 minutos de cache
+    gcTime: 5 * 60 * 1000, // 5 minutos em memória
   });
 
   const salesHourQuery = useQuery({
@@ -229,6 +236,27 @@ export default function DashboardPage() {
     staleTime: Infinity,
     enabled: isAuthenticated && isReady,
   });
+
+  const dataRangeQuery = useQuery({
+    queryKey: ["specials", "data-range"],
+    queryFn: fetchDataRange,
+    staleTime: Infinity,
+    enabled: isAuthenticated && isReady,
+  });
+
+  const handleFullPeriod = useCallback(() => {
+    if (dataRangeQuery.data) {
+      console.log('[Dashboard] Analisar Período Completo:', {
+        start: dataRangeQuery.data.start_date,
+        end: dataRangeQuery.data.end_date,
+      });
+      setPeriod("custom");
+      setCustomRange({
+        start: dataRangeQuery.data.start_date,
+        end: dataRangeQuery.data.end_date,
+      });
+    }
+  }, [dataRangeQuery.data, setPeriod, setCustomRange]);
 
   const channelOptions = useMemo<ChannelFilterOption[]>(() => {
     const groups = new Map<string, ChannelFilterOption>();
@@ -276,26 +304,26 @@ export default function DashboardPage() {
   });
 
   const insightsData = insightsQuery.data;
-  const previousInsightsData = previousInsightsQuery.data;
 
   const metrics = useMemo(() => {
-    const currentSales = (insightsData?.preview.sales_daily ?? [])
+    // Usar os TOTAIS calculados no backend, não somar o preview!
+    const currentRevenue = metricsQuery.data?.totals?.revenue ?? 0;
+    const previousRevenue = previousMetricsQuery.data?.totals?.revenue ?? 0;
+    const currentOrders = metricsQuery.data?.totals?.orders ?? 0;
+    const previousOrders = previousMetricsQuery.data?.totals?.orders ?? 0;
+    const currentAvgTicket = metricsQuery.data?.totals?.avg_ticket ?? 0;
+    const previousAvgTicket = previousMetricsQuery.data?.totals?.avg_ticket ?? 0;
+
+    // Para o gráfico, usar os dados diários do preview
+    const currentSales = (metricsQuery.data?.preview.sales_daily ?? [])
       .slice()
       .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
-    const previousSales = (previousInsightsData?.preview.sales_daily ?? [])
+    const previousSales = (previousMetricsQuery.data?.preview.sales_daily ?? [])
       .slice()
       .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
 
-    const currentRevenue = sum(currentSales.map((item) => item.revenue ?? 0));
-    const previousRevenue = sum(previousSales.map((item) => item.revenue ?? 0));
-    const currentOrders = sum(currentSales.map((item) => item.orders ?? 0));
-    const previousOrders = sum(previousSales.map((item) => item.orders ?? 0));
-
-    const currentAvgTicket = currentOrders > 0 ? currentRevenue / currentOrders : 0;
-    const previousAvgTicket = previousOrders > 0 ? previousRevenue / previousOrders : 0;
-
-    const deliveryStats = insightsData?.preview.delivery_stats ?? [];
-    const prevDeliveryStats = previousInsightsData?.preview.delivery_stats ?? [];
+    const deliveryStats = metricsQuery.data?.preview.delivery_stats ?? [];
+    const prevDeliveryStats = previousMetricsQuery.data?.preview.delivery_stats ?? [];
     const currentAvgDelivery = deliveryStats.length
       ? sum(deliveryStats.map((item) => item.avg_delivery_minutes)) / deliveryStats.length
       : 0;
@@ -319,7 +347,7 @@ export default function DashboardPage() {
       chartPrevious: previousSales,
       insights: insightsData?.insights ?? [],
     };
-  }, [insightsData, previousInsightsData]);
+  }, [metricsQuery.data, previousMetricsQuery.data, insightsData]);
 
   const chartData = useMemo(() => {
     const previous = metrics.chartPrevious ?? [];
@@ -389,12 +417,19 @@ export default function DashboardPage() {
             channels={channelOptions}
             isChannelLoading={channelsQuery.isLoading}
             onRefresh={handleRefresh}
+            onFullPeriod={handleFullPeriod}
           />
         </div>
 
-        {insightsQuery.isError && !insightsData && (
+        {metricsQuery.isError && (
           <div className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            Nao foi possivel carregar os dados do dashboard. Tente novamente mais tarde.
+            Não foi possível carregar os dados do dashboard. Tente novamente mais tarde.
+          </div>
+        )}
+
+        {insightsQuery.isError && !insightsData && (
+          <div className="mb-6 rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Não foi possível carregar os insights de IA. Métricas continuam disponíveis.
           </div>
         )}
 
@@ -404,32 +439,43 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <MetricCard
-            title="Receita Total"
-            value={formatCurrency(metrics.revenue ?? 0)}
-            change={metrics.revenueChange}
-            changeLabel="vs. semana anterior"
-          />
-          <MetricCard
-            title="Pedidos"
-            value={formatNumber(metrics.orders ?? 0)}
-            change={metrics.ordersChange}
-            changeLabel="vs. semana anterior"
-          />
-          <MetricCard
-            title="Ticket Medio"
-            value={formatCurrency(metrics.avgTicket ?? 0)}
-            change={metrics.avgTicketChange}
-            changeLabel="vs. semana anterior"
-          />
-          <MetricCard
-            title="Tempo medio de entrega"
-            value={`${(metrics.avgDelivery ?? 0).toFixed(0)} min`}
-            change={metrics.avgDeliveryChange}
-            changeLabel="vs. semana anterior"
-          />
-        </div>
+        {metricsQuery.isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="rounded-lg border p-4 animate-pulse">
+                <div className="h-4 bg-muted rounded w-1/2 mb-2"></div>
+                <div className="h-8 bg-muted rounded w-3/4"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <MetricCard
+              title="Receita Total"
+              value={formatCurrency(metrics.revenue ?? 0)}
+              change={metrics.revenueChange}
+              changeLabel="vs. semana anterior"
+            />
+            <MetricCard
+              title="Pedidos"
+              value={formatNumber(metrics.orders ?? 0)}
+              change={metrics.ordersChange}
+              changeLabel="vs. semana anterior"
+            />
+            <MetricCard
+              title="Ticket Medio"
+              value={formatCurrency(metrics.avgTicket ?? 0)}
+              change={metrics.avgTicketChange}
+              changeLabel="vs. semana anterior"
+            />
+            <MetricCard
+              title="Tempo medio de entrega"
+              value={`${(metrics.avgDelivery ?? 0).toFixed(0)} min`}
+              change={metrics.avgDeliveryChange}
+              changeLabel="vs. semana anterior"
+            />
+          </div>
+        )}
 
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-3">Insights automaticos</h3>

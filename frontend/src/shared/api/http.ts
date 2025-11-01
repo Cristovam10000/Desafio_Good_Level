@@ -6,7 +6,7 @@ const AUTH_STORAGE_KEY = "restaurantbi.auth";
 
 export const http = axios.create({
   baseURL: env.apiBaseUrl,
-  timeout: 15000,
+  timeout: 60000, // 60 segundos para queries pesadas (período completo)
 });
 
 http.interceptors.request.use((config) => {

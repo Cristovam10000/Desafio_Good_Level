@@ -65,7 +65,13 @@ async def generate_insights_text(data: str) -> str:
 
     loop = asyncio.get_running_loop()
     try:
-        return await loop.run_in_executor(None, _runner)
+        # Timeout de 60 segundos para evitar travamento (Gemini pode ser lento)
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, _runner),
+            timeout=60.0
+        )
+    except asyncio.TimeoutError:
+        raise AIIntegrationError("Timeout ao consultar o Gemini (60s). A API pode estar lenta ou indisponível.")
     except Exception as exc:  # pragma: no cover - feedback direto
         raise AIIntegrationError(f"Falha ao consultar o Gemini: {exc}") from exc
 

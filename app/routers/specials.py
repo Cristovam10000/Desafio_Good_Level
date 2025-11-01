@@ -410,6 +410,45 @@ def list_channels():
 
 
 # -----------------------------------------------------------------------------
+# Data Range Endpoint
+# -----------------------------------------------------------------------------
+
+
+class DataRangeResponse(BaseModel):
+    """Response model for data range endpoint."""
+    ok: bool = True
+    start_date: str
+    end_date: str
+
+
+@router.get("/data-range", response_model=DataRangeResponse)
+def get_data_range():
+    """
+    Retorna o período completo de dados disponível no sistema.
+    Consulta as datas mínima e máxima da tabela de vendas.
+    """
+    sql = """
+        SELECT 
+            MIN(created_at)::date AS start_date,
+            MAX(created_at)::date AS end_date
+        FROM sales
+    """
+    result = fetch_all(sql, timeout_ms=2000)
+    
+    if not result or not result[0]:
+        raise HTTPException(
+            status_code=404,
+            detail="Nenhum dado encontrado no sistema"
+        )
+    
+    row = result[0]
+    return DataRangeResponse(
+        start_date=str(row["start_date"]),
+        end_date=str(row["end_date"])
+    )
+
+
+# -----------------------------------------------------------------------------
 # Refresh manual das materialized views
 # -----------------------------------------------------------------------------
 

@@ -149,6 +149,74 @@ def _validate_range(start: str, end: str) -> None:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/metrics")
+async def analytics_metrics(
+    request: Request,
+    start: Optional[str] = Query(None, description="Início do período (YYYY-MM-DD)"),
+    end: Optional[str] = Query(None, description="Fim do período (YYYY-MM-DD)"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja"),
+    channel_ids: Optional[str] = Query(None, description="Lista de canais separados por vírgula"),
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+) -> Response:
+    """
+    Endpoint OTIMIZADO que retorna apenas os dados agregados (sales_daily) 
+    SEM chamar a IA do Gemini. Muito mais rápido para o dashboard.
+    """
+    logging.info(f"[metrics] Iniciando - start={start}, end={end}, user={user.sub}")
+    
+    if not start or not end:
+        start, end = _default_period(days=30)
+    _validate_range(start, end)
+
+    allowed_store_ids = user.stores or []
+    channel_ids_list: Optional[list[int]] = None
+    if channel_ids:
+        try:
+            parsed = [int(value.strip()) for value in channel_ids.split(",") if value.strip()]
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="channel_ids deve conter apenas números separados por vírgula.") from exc
+        channel_ids_list = parsed or None
+
+    if store_id is not None:
+        if allowed_store_ids and store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Loja não autorizada para este usuário.")
+        effective_store_ids: Optional[list[int]] = [store_id]
+    else:
+        effective_store_ids = allowed_store_ids or None
+
+    try:
+        dataset = build_dataset(
+            start,
+            end,
+            store_ids=effective_store_ids,
+            channel_ids=channel_ids_list,
+            city=None,
+            top_products=5,
+            top_locations=5,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logging.error(f"Erro ao construir dataset: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(exc)}") from exc
+
+    response_payload: Dict[str, Any] = {
+        "ok": True,
+        "period": {"start": start, "end": end},
+        "preview": dataset.preview(),
+        "totals": {
+            "revenue": float(dataset.sales_daily["revenue"].sum()),
+            "orders": int(dataset.sales_daily["orders"].sum()),
+            "items_value": float(dataset.sales_daily["items_value"].sum()),
+            "discounts": float(dataset.sales_daily["discounts"].sum()),
+            "avg_ticket": float(dataset.sales_daily["avg_ticket"].mean()) if len(dataset.sales_daily) > 0 else 0.0,
+        },
+    }
+
+    # Cache agressivo (5 minutos) pois não tem IA
+    return etag_json(request, response_payload, max_age=300, swr=600)
+
+
 @router.get("/insights")
 async def analytics_insights(
     request: Request,

@@ -26,6 +26,7 @@ type FilterPanelProps = {
   channels: ChannelFilterOption[];
   isChannelLoading: boolean;
   onRefresh: () => void;
+  onFullPeriod?: () => void;
 };
 
 const PERIOD_LABEL: Record<PeriodOption, string> = {
@@ -46,6 +47,7 @@ export default function FilterPanel({
   channels,
   isChannelLoading,
   onRefresh,
+  onFullPeriod,
 }: FilterPanelProps) {
   const handleStartChange = (value: string) => {
     if (!value) return;
@@ -141,10 +143,12 @@ export default function FilterPanel({
               variant="outline" 
               size="sm" 
               className="border-primary/20 text-primary hover:bg-primary/10 h-10"
+              onClick={onFullPeriod}
+              disabled={!onFullPeriod}
             >
               <TrendingUp className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Comparar períodos</span>
-              <span className="sm:hidden">Comparar</span>
+              <span className="hidden sm:inline">Analisar Período Completo</span>
+              <span className="sm:hidden">Período Completo</span>
             </Button>
 
             <Button 

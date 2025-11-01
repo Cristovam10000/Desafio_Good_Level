@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
-import { fetchProductTop, fetchSalesHour, fetchChannels } from "@/shared/api/specials";
+import { fetchProductTop, fetchSalesHour, fetchChannels, fetchDataRange } from "@/shared/api/specials";
 import { fetchAnomalies } from "@/shared/api/analytics";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
 import { useAuth } from "@/shared/hooks/useAuth";
@@ -67,6 +67,23 @@ export default function AnalyticsPage() {
     staleTime: Infinity,
     enabled: isAuthenticated && isReady,
   });
+
+  const dataRangeQuery = useQuery({
+    queryKey: ["specials", "data-range"],
+    queryFn: fetchDataRange,
+    staleTime: Infinity,
+    enabled: isAuthenticated && isReady,
+  });
+
+  const handleFullPeriod = () => {
+    if (dataRangeQuery.data) {
+      setPeriod("custom");
+      setCustomRange({
+        start: dataRangeQuery.data.start_date,
+        end: dataRangeQuery.data.end_date,
+      });
+    }
+  };
 
   const anomaliesQuery = useQuery({
     queryKey: ["analytics", "anomalies", salesRange.start, salesRange.end],
@@ -171,6 +188,7 @@ export default function AnalyticsPage() {
             channelsQuery.refetch();
             anomaliesQuery.refetch();
           }}
+          onFullPeriod={handleFullPeriod}
         />
 
         {(productTopQuery.isError || salesHourQuery.isError) && (

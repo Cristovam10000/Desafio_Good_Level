@@ -31,6 +31,35 @@ const AnalyticsInsightsResponseSchema = z.object({
 
 export type AnalyticsInsightsResponse = z.infer<typeof AnalyticsInsightsResponseSchema>;
 
+const AnalyticsMetricsResponseSchema = z.object({
+  ok: z.boolean(),
+  period: z.object({
+    start: z.string(),
+    end: z.string(),
+  }),
+  preview: InsightsPreviewSchema,
+  totals: z.object({
+    revenue: z.number(),
+    orders: z.number(),
+    items_value: z.number(),
+    discounts: z.number(),
+    avg_ticket: z.number(),
+  }),
+});
+
+export type AnalyticsMetricsResponse = z.infer<typeof AnalyticsMetricsResponseSchema>;
+
+export async function fetchMetrics(params: {
+  start?: string;
+  end?: string;
+  store_id?: number;
+  channel_id?: number;
+  channel_ids?: string;
+}): Promise<AnalyticsMetricsResponse> {
+  const response = await http.get("/analytics/metrics", { params });
+  return AnalyticsMetricsResponseSchema.parse(response.data);
+}
+
 export async function fetchInsights(params: {
   start?: string;
   end?: string;

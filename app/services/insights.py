@@ -5,6 +5,7 @@ Service layer responsável por montar datasets analíticos e solicitar insights
 ao modelo do Gemini.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Dict, Optional, Sequence
@@ -18,8 +19,8 @@ from app.infra.db import fetch_all
 
 
 # Timeouts ajustados para consultas mais pesadas em bases grandes
-HEAVY_QUERY_TIMEOUT_MS = 6000
-DEFAULT_QUERY_TIMEOUT_MS = 1500
+HEAVY_QUERY_TIMEOUT_MS = 30000  # 30 segundos para queries pesadas
+DEFAULT_QUERY_TIMEOUT_MS = 5000  # 5 segundos para queries normais
 
 
 def _parse_date(value: str) -> date:
@@ -82,7 +83,7 @@ def _fetch_sales_daily(
     ORDER BY bucket_day ASC
     """
     try:
-        rows = fetch_all(sql_mv, params, timeout_ms=1500)
+        rows = fetch_all(sql_mv, params, timeout_ms=DEFAULT_QUERY_TIMEOUT_MS)
     except ProgrammingError as exc:
         if "UndefinedTable" not in str(exc):
             raise
@@ -109,7 +110,7 @@ def _fetch_sales_daily(
         GROUP BY DATE(s.created_at)
         ORDER BY bucket_day ASC
         """
-        rows = fetch_all(sql_raw, params, timeout_ms=3000)
+        rows = fetch_all(sql_raw, params, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
     return pd.DataFrame(rows)
 
 
@@ -399,9 +400,9 @@ class InsightsDataset:
             return f"## {title}\n{csv_text.strip()}"
 
         sections = [
-            _fmt("Vendas agregadas por dia", self.sales_daily, limit=14),
-            _fmt("Top produtos por receita", self.top_products, limit=10),
-            _fmt("Performance de entrega (p90 minutos)", self.delivery_stats, limit=10),
+            _fmt("Vendas agregadas por dia", self.sales_daily, limit=7),  # Reduzido de 14 para 7
+            _fmt("Top produtos por receita", self.top_products, limit=5),  # Reduzido de 10 para 5
+            _fmt("Performance de entrega (p90 minutos)", self.delivery_stats, limit=5),  # Reduzido de 10 para 5
         ]
         return "\n\n".join(sections)
 
@@ -435,12 +436,22 @@ def build_dataset(
     top_locations: int,
 ) -> InsightsDataset:
     """Carrega todos os recortes necessários para gerar insights."""
+    logging.info(f"[build_dataset] Building dataset for period: {start} to {end}")
     start_dt, end_dt = _start_end(start, end)
+    logging.info(f"[build_dataset] Parsed dates: {start_dt} to {end_dt}")
 
     # Executar as 3 queries sequencialmente
+    logging.info("[build_dataset] Fetching sales_daily...")
     sales_daily = _fetch_sales_daily(start_dt, end_dt, store_ids, channel_ids)
+    logging.info(f"[build_dataset] sales_daily rows: {len(sales_daily)}")
+    
+    logging.info("[build_dataset] Fetching top_products...")
     top_products_df = _fetch_top_products(start_dt, end_dt, top_products, store_ids, channel_ids)
+    logging.info(f"[build_dataset] top_products rows: {len(top_products_df)}")
+    
+    logging.info("[build_dataset] Fetching delivery_stats...")
     delivery_df = _fetch_delivery_stats(start_dt, end_dt, top_locations, city, store_ids, channel_ids)
+    logging.info(f"[build_dataset] delivery_stats rows: {len(delivery_df)}")
 
     return InsightsDataset(
         sales_daily=sales_daily,
