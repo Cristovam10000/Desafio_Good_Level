@@ -1,22 +1,21 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
+import { useMemo, useState, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { format, parseISO, addDays, differenceInCalendarDays, subDays, formatISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
-import FilterPanel from "@/features/filters/components/FilterPanel";
+import FilterPanel, { PeriodOption } from "@/features/filters/components/FilterPanel";
 import { fetchInsights } from "@/shared/api/analytics";
 import { fetchChannels, fetchSalesHour } from "@/shared/api/specials";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
-import { isoRange, isoRangeForLastNDays, expandToDateTime } from "@/shared/lib/date";
+import { IsoRange, expandToDateTime } from "@/shared/lib/date";
 import { InsightCard } from "@/widgets/dashboard/InsightCard";
 import ChannelChart from "@/widgets/dashboard/ChannelChart.client";
 import SalesChart from "@/widgets/dashboard/SalesChart.client";
 import { MetricCard } from "@/widgets/dashboard/MetricCard";
 import { Navbar } from "@/widgets/layout/Navbar";
 
-const DASHBOARD_DAYS = 7;
 const INSIGHT_TYPES = ["success", "warning", "info", "trend"] as const;
 
 function sum(values: Array<number | null | undefined>) {
@@ -45,44 +44,154 @@ function splitInsight(text: string) {
   };
 }
 
-export default function DashboardPage() {
-  const { auth } = useAuth();
-  const { isAuthenticated } = useRequireAuth();
+function ensureOrderedRange(range: IsoRange): IsoRange {
+  const startDate = parseISO(range.start);
+  const endDate = parseISO(range.end);
+  if (startDate <= endDate) {
+    return range;
+  }
+  return {
+    start: formatISO(endDate, { representation: "date" }),
+    end: formatISO(startDate, { representation: "date" }),
+  };
+}
 
-  const ranges = useMemo(
-    () => ({
-      current: isoRangeForLastNDays(DASHBOARD_DAYS),
-      previous: isoRange(DASHBOARD_DAYS, DASHBOARD_DAYS),
-    }),
-    []
-  );
+function rangeForPreset(option: PeriodOption): IsoRange {
+  const today = new Date();
+  const formatDate = (date: Date) => formatISO(date, { representation: "date" });
+  switch (option) {
+    case "today": {
+      const start = formatDate(today);
+      return { start, end: start };
+    }
+    case "7days": {
+      return { start: formatDate(subDays(today, 6)), end: formatDate(today) };
+    }
+    case "30days": {
+      return { start: formatDate(subDays(today, 29)), end: formatDate(today) };
+    }
+    case "90days": {
+      return { start: formatDate(subDays(today, 89)), end: formatDate(today) };
+    }
+    default:
+      return { start: formatDate(subDays(today, 6)), end: formatDate(today) };
+  }
+}
+
+function normalizeRangeForApi(range: IsoRange): IsoRange {
+  const ordered = ensureOrderedRange(range);
+  const startDate = parseISO(ordered.start);
+  let endDate = parseISO(ordered.end);
+  if (endDate <= startDate) {
+    endDate = addDays(startDate, 1);
+  }
+  return {
+    start: formatISO(startDate, { representation: "date" }),
+    end: formatISO(endDate, { representation: "date" }),
+  };
+}
+
+
+export default function DashboardPage() {
+  const queryClient = useQueryClient();
+  const { auth, isReady: authReady } = useAuth();
+  const { isAuthenticated, isReady: guardReady } = useRequireAuth();
+  const isReady = authReady && guardReady;
+
+  const [period, setPeriod] = useState<PeriodOption>("7days");
+  const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("today"));
+  const [channelFilter, setChannelFilter] = useState<number | null>(null);
+
+  const displayRange = useMemo<IsoRange>(() => {
+    if (period === "custom") {
+      return ensureOrderedRange(customRange);
+    }
+    return rangeForPreset(period);
+  }, [customRange, period]);
+
+  const apiRange = useMemo(() => normalizeRangeForApi(displayRange), [displayRange]);
+
+  const rangeSpanDays = useMemo(() => {
+    const startDate = parseISO(displayRange.start);
+    const endDate = parseISO(displayRange.end);
+    const diff = differenceInCalendarDays(endDate, startDate);
+    return diff >= 0 ? diff + 1 : 1;
+  }, [displayRange]);
+
+  const previousRange = useMemo<IsoRange>(() => {
+    const startDate = parseISO(displayRange.start);
+    const prevEnd = subDays(startDate, 1);
+    const prevStart = subDays(startDate, rangeSpanDays);
+    return {
+      start: formatISO(prevStart, { representation: "date" }),
+      end: formatISO(prevEnd, { representation: "date" }),
+    };
+  }, [displayRange, rangeSpanDays]);
+
+  const previousApiRange = useMemo(() => normalizeRangeForApi(previousRange), [previousRange]);
+
+  const handlePeriodChange = useCallback((value: PeriodOption) => {
+    setPeriod(value);
+    if (value !== "custom") {
+      setCustomRange(rangeForPreset(value));
+    }
+  }, []);
+
+  const handleCustomRangeChange = useCallback((range: IsoRange) => {
+    setCustomRange(ensureOrderedRange(range));
+    setPeriod("custom");
+  }, []);
+
+  const handleChannelChange = useCallback((value: number | null) => {
+    setChannelFilter(value);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["analytics", "insights"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics", "insights", "previous"] });
+    queryClient.invalidateQueries({ queryKey: ["specials", "sales-hour"] });
+  }, [queryClient]);
 
   const insightsQuery = useQuery({
-    queryKey: ["analytics", "insights", ranges.current.start, ranges.current.end],
-    queryFn: () => fetchInsights({ start: ranges.current.start, end: ranges.current.end }),
-    enabled: isAuthenticated,
+    queryKey: ["analytics", "insights", apiRange.start, apiRange.end, channelFilter],
+    queryFn: () =>
+      fetchInsights({
+        start: apiRange.start,
+        end: apiRange.end,
+        ...(channelFilter != null ? { channel_id: channelFilter } : {}),
+      }),
+    enabled: isAuthenticated && isReady,
   });
 
   const previousInsightsQuery = useQuery({
-    queryKey: ["analytics", "insights", ranges.previous.start, ranges.previous.end],
-    queryFn: () => fetchInsights({ start: ranges.previous.start, end: ranges.previous.end }),
-    enabled: isAuthenticated,
+    queryKey: ["analytics", "insights", "previous", previousApiRange.start, previousApiRange.end, channelFilter],
+    queryFn: () =>
+      fetchInsights({
+        start: previousApiRange.start,
+        end: previousApiRange.end,
+        ...(channelFilter != null ? { channel_id: channelFilter } : {}),
+      }),
+    enabled: isAuthenticated && isReady,
   });
 
   const salesHourQuery = useQuery({
-    queryKey: ["specials", "sales-hour", ranges.current.start, ranges.current.end],
+    queryKey: ["specials", "sales-hour", displayRange.start, displayRange.end, channelFilter],
     queryFn: () => {
-      const dtRange = expandToDateTime(ranges.current);
-      return fetchSalesHour({ start: dtRange.start, end: dtRange.end });
+      const dtRange = expandToDateTime(displayRange);
+      return fetchSalesHour({
+        start: dtRange.start,
+        end: dtRange.end,
+        ...(channelFilter != null ? { channel_id: channelFilter } : {}),
+      });
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isReady,
   });
 
   const channelsQuery = useQuery({
     queryKey: ["specials", "channels"],
     queryFn: fetchChannels,
     staleTime: Infinity,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isReady,
   });
 
   const metrics = useMemo(() => {
@@ -163,6 +272,14 @@ export default function DashboardPage() {
   const greetingName = auth?.user.name ?? "Maria";
   const insightItems = metrics.insights.slice(0, 4);
 
+  if (!isReady) {
+    return (
+      <div className="min-h-screen grid place-items-center text-muted-foreground">
+        Carregando painel...
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return null;
   }
@@ -177,12 +294,28 @@ export default function DashboardPage() {
         </div>
 
         <div className="mb-4">
-          <FilterPanel />
+          <FilterPanel
+            period={period}
+            range={displayRange}
+            onPeriodChange={handlePeriodChange}
+            onCustomRangeChange={handleCustomRangeChange}
+            channelId={channelFilter}
+            onChannelChange={handleChannelChange}
+            channels={channelsQuery.data ?? []}
+            isChannelLoading={channelsQuery.isLoading}
+            onRefresh={handleRefresh}
+          />
         </div>
 
         {insightsQuery.isError && (
           <div className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             Nao foi possivel carregar os dados do dashboard. Tente novamente mais tarde.
+          </div>
+        )}
+
+        {insightsQuery.data?.insights_error && !insightsQuery.isError && (
+          <div className="mb-6 rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {insightsQuery.data.insights_error}
           </div>
         )}
 

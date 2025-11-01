@@ -26,6 +26,7 @@ const AnalyticsInsightsResponseSchema = z.object({
   preview: InsightsPreviewSchema,
   insights: z.array(z.string()),
   raw_text: z.string().nullable(),
+  insights_error: z.string().optional(),
 });
 
 export type AnalyticsInsightsResponse = z.infer<typeof AnalyticsInsightsResponseSchema>;

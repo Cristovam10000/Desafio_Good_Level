@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { fetchProductTop, fetchSalesHour, fetchChannels } from "@/shared/api/specials";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useAuth } from "@/shared/hooks/useAuth";
 import { isoRangeForLastNDays, expandToDateTime } from "@/shared/lib/date";
 import { Navbar } from "@/widgets/layout/Navbar";
 import AnalyticsTable from "./_table";
@@ -13,7 +14,9 @@ import ProductsByTime from "./_products-by-time";
 import ChannelPie from "./_channel-pie";
 
 export default function AnalyticsPage() {
-  const { isAuthenticated } = useRequireAuth();
+  const { isAuthenticated, isReady: guardReady } = useRequireAuth();
+  const { isReady: authReady } = useAuth();
+  const isReady = authReady && guardReady;
 
   const salesRange = useMemo(() => isoRangeForLastNDays(7), []);
   const topProductsRange = useMemo(() => isoRangeForLastNDays(30), []);
@@ -21,7 +24,7 @@ export default function AnalyticsPage() {
   const productTopQuery = useQuery({
     queryKey: ["specials", "product-top", topProductsRange.start, topProductsRange.end],
     queryFn: () => fetchProductTop({ start: topProductsRange.start, end: topProductsRange.end, limit: 20 }),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isReady,
   });
 
   const salesHourQuery = useQuery({
@@ -30,14 +33,14 @@ export default function AnalyticsPage() {
       const dtRange = expandToDateTime(salesRange);
       return fetchSalesHour({ start: dtRange.start, end: dtRange.end });
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isReady,
   });
 
   const channelsQuery = useQuery({
     queryKey: ["specials", "channels"],
     queryFn: fetchChannels,
     staleTime: Infinity,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isReady,
   });
 
   const hourlyData = useMemo(() => {
@@ -98,6 +101,14 @@ export default function AnalyticsPage() {
       })),
     [productTopQuery.data]
   );
+
+  if (!isReady) {
+    return (
+      <div className="min-h-screen grid place-items-center text-muted-foreground">
+        Carregando analytics...
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return null;

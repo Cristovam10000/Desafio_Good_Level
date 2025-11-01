@@ -5,13 +5,13 @@ import { useAuth } from "./useAuth";
 
 export function useRequireAuth() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isReady } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (isReady && !isAuthenticated) {
       router.replace("/auth");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, isReady, router]);
 
-  return { isAuthenticated };
+  return { isAuthenticated, isReady };
 }

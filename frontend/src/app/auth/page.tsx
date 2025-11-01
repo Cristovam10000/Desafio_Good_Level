@@ -12,15 +12,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 
 export default function AuthPage() {
   const router = useRouter();
-  const { isAuthenticated, applyLogin } = useAuth();
+  const { isAuthenticated, isReady, applyLogin } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isReady && isAuthenticated) {
       router.replace("/");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, isReady, router]);
 
   const handleLogin = async (payload: LoginInput) => {
     try {
@@ -36,6 +36,10 @@ export default function AuthPage() {
       setIsLoading(false);
     }
   };
+
+  if (!isReady && isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen grid place-items-center bg-muted/40 px-4">

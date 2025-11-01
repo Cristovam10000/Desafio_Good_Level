@@ -8,6 +8,7 @@ import { AuthState, clearAuth, persistAuth, readAuth, writeAuthState } from "@/s
 
 type AuthContextValue = {
   auth: AuthState | null;
+  isReady: boolean;
   setAuthState: (state: AuthState | null) => void;
   applyLogin: (response: LoginResponse) => void;
   logout: () => void;
@@ -16,7 +17,17 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState | null>(() => readAuth());
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  // Carrega credenciais persistidas somente no cliente para evitar mismatch de hidratacao
+  useEffect(() => {
+    const stored = readAuth();
+    if (stored) {
+      setAuth(stored);
+    }
+    setIsReady(true);
+  }, []);
 
   useEffect(() => {
     if (auth) {
@@ -31,11 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       auth,
+      isReady,
       setAuthState: setAuth,
       applyLogin: (response: LoginResponse) => setAuth(persistAuth(response)),
       logout: () => setAuth(null),
     }),
-    [auth]
+    [auth, isReady]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
