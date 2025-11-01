@@ -15,6 +15,7 @@ import AnalyticsTable from "./_table";
 import ProductsByTime from "./_products-by-time";
 import ChannelPie from "./_channel-pie";
 import AnomalyDetector from "./_anomaly-detector";
+import { DetailedAnalyses } from "./_detailed-analyses";
 
 export default function AnalyticsPage() {
   const { isAuthenticated, isReady: guardReady } = useRequireAuth();
@@ -188,6 +189,13 @@ export default function AnalyticsPage() {
           data={anomaliesQuery.data || null}
           isLoading={anomaliesQuery.isLoading}
           isError={anomaliesQuery.isError}
+        />
+
+        {/* Análises Detalhadas da Estrutura de Vendas */}
+        <DetailedAnalyses
+          start={salesRange.start}
+          end={salesRange.end}
+          storeId={undefined}
         />
       </main>
     </div>
