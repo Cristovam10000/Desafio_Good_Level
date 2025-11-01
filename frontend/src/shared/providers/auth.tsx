@@ -17,17 +17,21 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState | null>(null);
-  const [isReady, setIsReady] = useState(false);
-
-  // Carrega credenciais persistidas somente no cliente para evitar mismatch de hidratacao
-  useEffect(() => {
+  // Inicializar o estado com validação de expiração
+  const [auth, setAuth] = useState<AuthState | null>(() => {
+    if (typeof window === "undefined") return null;
     const stored = readAuth();
-    if (stored) {
-      setAuth(stored);
+    if (!stored) return null;
+    
+    // Verificar se o token não expirou
+    if (stored.expiresAt && stored.expiresAt <= Date.now()) {
+      clearAuth();
+      return null;
     }
-    setIsReady(true);
-  }, []);
+    
+    return stored;
+  });
+  const isReady = true; // Sempre pronto já que o estado inicial é calculado de forma síncrona
 
   useEffect(() => {
     if (auth) {

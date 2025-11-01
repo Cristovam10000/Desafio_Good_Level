@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 
 from app.core.ai import AIIntegrationError
 from app.core.cache import etag_json
@@ -117,6 +118,7 @@ async def analytics(
 
 @router.get("/insights")
 async def analytics_insights(
+    request: Request,
     start: Optional[str] = Query(None, description="Início do período (YYYY-MM-DD). Default: últimos 30 dias"),
     end: Optional[str] = Query(None, description="Fim do período (YYYY-MM-DD)"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja"),
@@ -126,11 +128,13 @@ async def analytics_insights(
     top_products: int = Query(5, ge=1, le=20, description="Quantidade de produtos para enviar ao modelo"),
     top_locations: int = Query(5, ge=1, le=20, description="Quantidade de bairros para enviar ao modelo"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
-) -> Dict[str, Any]:
+) -> Response:
     """
     Constrói datasets agregados (MVs ou fallback) e solicita insights textuais ao
     Gemini. Retorna também uma prévia dos dados enviados ao modelo.
     """
+    logging.info(f"[insights] Iniciando - start={start}, end={end}, user={user.sub}")
+    
     if not start or not end:
         start, end = _default_period(days=30)
     _validate_range(start, end)
@@ -172,6 +176,9 @@ async def analytics_insights(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logging.error(f"Erro ao construir dataset: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(exc)}") from exc
 
     response_payload: Dict[str, Any] = {
         "ok": True,
@@ -188,7 +195,7 @@ async def analytics_insights(
     if dataset.is_empty():
         response_payload["insights"] = ["Nenhum dado encontrado para o período informado."]
         response_payload["raw_text"] = None
-        return response_payload
+        return etag_json(request, response_payload, max_age=300, swr=600)
 
     try:
         ai_payload = await generate_dataset_insights(dataset)
@@ -200,7 +207,8 @@ async def analytics_insights(
         ]
         response_payload["raw_text"] = None
         response_payload["insights_error"] = str(exc)
-        return response_payload
+        return etag_json(request, response_payload, max_age=60, swr=120)
 
     response_payload.update(ai_payload)
-    return response_payload
+    # Cache mais agressivo para insights (5 minutos com SWR de 10 minutos)
+    return etag_json(request, response_payload, max_age=300, swr=600)

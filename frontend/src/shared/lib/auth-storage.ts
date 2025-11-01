@@ -27,6 +27,14 @@ export function readAuth(): AuthState | null {
     if (!stored) return null;
     const parsed = JSON.parse(stored);
     if (!isValidPayload(parsed)) return null;
+    
+    // Verificar se o token não expirou
+    if (parsed.expiresAt && parsed.expiresAt < Date.now()) {
+      // Token expirado - limpar localStorage
+      window.localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    
     return parsed;
   } catch {
     return null;

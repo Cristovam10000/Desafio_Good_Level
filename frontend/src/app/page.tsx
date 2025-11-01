@@ -184,6 +184,9 @@ export default function DashboardPage() {
       });
     },
     enabled: isAuthenticated && isReady,
+    staleTime: 5 * 60 * 1000, // 5 minutos - dados ficam frescos sem refetch
+    gcTime: 10 * 60 * 1000, // 10 minutos - mantém em cache
+    placeholderData: (previousData) => previousData, // Mantém dados anteriores durante refetch
   });
 
   const previousInsightsQuery = useQuery({
@@ -202,6 +205,9 @@ export default function DashboardPage() {
         ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
       }),
     enabled: isAuthenticated && isReady,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
   });
 
   const salesHourQuery = useQuery({
@@ -269,8 +275,8 @@ export default function DashboardPage() {
     enabled: isAuthenticated && isReady
   });
 
-  const insightsData = insightsQuery.data ?? insightsQuery.previousData;
-  const previousInsightsData = previousInsightsQuery.data ?? previousInsightsQuery.previousData;
+  const insightsData = insightsQuery.data;
+  const previousInsightsData = previousInsightsQuery.data;
 
   const metrics = useMemo(() => {
     const currentSales = (insightsData?.preview.sales_daily ?? [])

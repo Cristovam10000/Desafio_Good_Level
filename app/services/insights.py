@@ -409,7 +409,13 @@ class InsightsDataset:
         def _preview(df: pd.DataFrame) -> list:
             if df.empty:
                 return []
-            return df.head(limit).to_dict(orient="records")
+            records = df.head(limit).to_dict(orient="records")
+            # Converter objetos date/datetime para string ISO
+            for record in records:
+                for key, value in record.items():
+                    if isinstance(value, (date, datetime)):
+                        record[key] = value.isoformat()
+            return records
 
         return {
             "sales_daily": _preview(self.sales_daily),
@@ -431,6 +437,7 @@ def build_dataset(
     """Carrega todos os recortes necessários para gerar insights."""
     start_dt, end_dt = _start_end(start, end)
 
+    # Executar as 3 queries sequencialmente
     sales_daily = _fetch_sales_daily(start_dt, end_dt, store_ids, channel_ids)
     top_products_df = _fetch_top_products(start_dt, end_dt, top_products, store_ids, channel_ids)
     delivery_df = _fetch_delivery_stats(start_dt, end_dt, top_locations, city, store_ids, channel_ids)
