@@ -1,9 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/shared/ui/button";
-import { BarChart3, Bell, User } from "lucide-react";
+import { BarChart3, Bell, LogOut, Menu } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/shared/ui/sheet";
 import { cn } from "@/shared/lib/utils";
 import { env } from "@/shared/config/env";
 import { useAuth } from "@/shared/hooks/useAuth";
@@ -15,6 +29,7 @@ const NAV_ITEMS = [
 ];
 
 export function Navbar({ activeTab }: { activeTab?: string }) {
+  const [open, setOpen] = useState(false);
   const path = usePathname();
   const current = activeTab ?? (path?.startsWith("/analytics") ? "analytics" : "dashboard");
   const router = useRouter();
@@ -23,6 +38,7 @@ export function Navbar({ activeTab }: { activeTab?: string }) {
   const handleLogout = () => {
     logout();
     router.replace("/auth");
+    setOpen(false);
   };
 
   const initials = auth?.user?.name
@@ -45,7 +61,8 @@ export function Navbar({ activeTab }: { activeTab?: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 max-w-full overflow-x-auto">
+        {/* Menu Desktop - escondido no mobile */}
+        <div className="hidden md:flex items-center gap-1 bg-muted/50 rounded-lg p-1 max-w-full overflow-x-auto">
           {NAV_ITEMS.map((item) => (
             <Link key={item.id} href={item.href}>
               <Button
@@ -59,23 +76,90 @@ export function Navbar({ activeTab }: { activeTab?: string }) {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
+        {/* Menu Desktop - Ícones à direita */}
+        <div className="hidden md:flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="relative">
             <Bell className="w-5 h-5" />
           </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="flex items-center gap-2 px-3"
-            onClick={handleLogout}
-            title="Sair"
-          >
-            <User className="w-4 h-4" />
-            <span>Sair</span>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="rounded-full" title="Menu do usuário">
+                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-semibold text-sm text-muted-foreground uppercase">
+                  {initials || "?"}
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 cursor-pointer">
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sair</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Menu Mobile - Sheet com hamburguer */}
+        <div className="flex md:hidden items-center gap-2">
+          <Button variant="ghost" size="icon" className="relative">
+            <Bell className="w-5 h-5" />
           </Button>
-          <div className="hidden sm:flex items-center justify-center w-9 h-9 rounded-full bg-muted text-sm font-semibold uppercase text-muted-foreground">
-            {initials || "?"}
-          </div>
+
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" title="Menu">
+                <Menu className="w-6 h-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+              <SheetHeader>
+                <SheetTitle>Menu</SheetTitle>
+              </SheetHeader>
+              
+              <div className="flex flex-col gap-4 mt-6">
+                {/* Informações do Usuário */}
+                <div className="flex items-center gap-3 pb-4 border-b">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center font-bold text-lg text-primary">
+                    {initials || "?"}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{auth?.user?.name || "Usuário"}</p>
+                    <p className="text-xs text-muted-foreground">Bem-vindo</p>
+                  </div>
+                </div>
+
+                {/* Navegação */}
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Navegação</p>
+                  {NAV_ITEMS.map((item) => (
+                    <Link key={item.id} href={item.href} onClick={() => setOpen(false)}>
+                      <Button
+                        variant={current === item.id ? "default" : "ghost"}
+                        className={cn(
+                          "w-full justify-start",
+                          current === item.id && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        {item.label}
+                      </Button>
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Botão Sair */}
+                <div className="mt-auto pt-4 border-t">
+                  <Button
+                    variant="destructive"
+                    className="w-full justify-start"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sair
+                  </Button>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
     </nav>

@@ -62,7 +62,7 @@ export default function FilterPanel({
   };
 
   return (
-    <Card className="p-3 bg-card/70 border-border/40 shadow-sm">
+    <Card className="p-3 bg-card border-border shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Select value={period} onValueChange={(value) => onPeriodChange(value as PeriodOption)}>
           <SelectTrigger className="w-[190px] bg-background text-sm">
@@ -129,7 +129,7 @@ export default function FilterPanel({
         </Select>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" className="border-primary/20 text-xs text-primary" disabled>
+          <Button variant="outline" size="sm" className="border-primary/20 text-xs text-primary">
             <TrendingUp className="w-4 h-4 mr-2" /> Comparar períodos
           </Button>
 
