@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { fetchProductTop, fetchSalesHour, fetchChannels } from "@/shared/api/specials";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
 import { useAuth } from "@/shared/hooks/useAuth";
-import { isoRangeForLastNDays, expandToDateTime } from "@/shared/lib/date";
+import { isoRangeForLastNDays, expandToDateTime, type IsoRange } from "@/shared/lib/date";
 import { Navbar } from "@/widgets/layout/Navbar";
+import FilterPanel, { type PeriodOption } from "@/features/filters/components/FilterPanel";
 import AnalyticsTable from "./_table";
 import ProductsByTime from "./_products-by-time";
 import ChannelPie from "./_channel-pie";
@@ -18,8 +19,29 @@ export default function AnalyticsPage() {
   const { isReady: authReady } = useAuth();
   const isReady = authReady && guardReady;
 
-  const salesRange = useMemo(() => isoRangeForLastNDays(7), []);
-  const topProductsRange = useMemo(() => isoRangeForLastNDays(30), []);
+  // Estado do filtro de período
+  const [period, setPeriod] = useState<PeriodOption>("7days");
+  const [customRange, setCustomRange] = useState<IsoRange>(() => isoRangeForLastNDays(7));
+
+  // Calcula o range baseado no período selecionado
+  const salesRange = useMemo(() => {
+    switch (period) {
+      case "today":
+        return isoRangeForLastNDays(1);
+      case "7days":
+        return isoRangeForLastNDays(7);
+      case "30days":
+        return isoRangeForLastNDays(30);
+      case "90days":
+        return isoRangeForLastNDays(90);
+      case "custom":
+        return customRange;
+      default:
+        return isoRangeForLastNDays(7);
+    }
+  }, [period, customRange]);
+
+  const topProductsRange = salesRange; // Usa o mesmo período selecionado
 
   const productTopQuery = useQuery({
     queryKey: ["specials", "product-top", topProductsRange.start, topProductsRange.end],
@@ -119,6 +141,24 @@ export default function AnalyticsPage() {
       <Navbar activeTab="analytics" />
       <main className="px-4 sm:px-6 py-6 max-w-[1600px] mx-auto space-y-6">
         <h2 className="text-2xl font-bold">Analytics avancado</h2>
+        
+        {/* Filtro de período */}
+        <FilterPanel
+          period={period}
+          range={salesRange}
+          onPeriodChange={setPeriod}
+          onCustomRangeChange={setCustomRange}
+          channelOption={null}
+          onChannelChange={() => {}}
+          channels={[]}
+          isChannelLoading={false}
+          onRefresh={() => {
+            productTopQuery.refetch();
+            salesHourQuery.refetch();
+            channelsQuery.refetch();
+          }}
+        />
+
         {(productTopQuery.isError || salesHourQuery.isError) && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             Nao foi possivel carregar os dados analiticos. Recarregue a pagina ou tente novamente.
