@@ -42,3 +42,34 @@ export async function fetchInsights(params: {
   const response = await http.get("/analytics/insights", { params });
   return AnalyticsInsightsResponseSchema.parse(response.data);
 }
+
+const AnomalyResultsSchema = z.object({
+  queda_semanal: z.string(),
+  pico_promocional: z.string(),
+  crescimento_linear: z.string(),
+  sazonalidade: z.string(),
+});
+
+const AnomaliesResponseSchema = z.object({
+  ok: z.boolean(),
+  anomalies_found: z.number(),
+  results: AnomalyResultsSchema,
+  raw_response: z.string().nullable(),
+  period: z.object({
+    start: z.string(),
+    end: z.string(),
+  }),
+  error: z.string().optional(),
+});
+
+export type AnomaliesResponse = z.infer<typeof AnomaliesResponseSchema>;
+
+export async function fetchAnomalies(params: {
+  start?: string;
+  end?: string;
+  store_id?: number;
+  channel_ids?: string;
+}): Promise<AnomaliesResponse> {
+  const response = await http.get("/analytics/anomalies", { params });
+  return AnomaliesResponseSchema.parse(response.data);
+}

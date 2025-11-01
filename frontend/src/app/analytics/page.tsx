@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { fetchProductTop, fetchSalesHour, fetchChannels } from "@/shared/api/specials";
+import { fetchAnomalies } from "@/shared/api/analytics";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { isoRangeForLastNDays, expandToDateTime, type IsoRange } from "@/shared/lib/date";
@@ -13,6 +14,7 @@ import FilterPanel, { type PeriodOption } from "@/features/filters/components/Fi
 import AnalyticsTable from "./_table";
 import ProductsByTime from "./_products-by-time";
 import ChannelPie from "./_channel-pie";
+import AnomalyDetector from "./_anomaly-detector";
 
 export default function AnalyticsPage() {
   const { isAuthenticated, isReady: guardReady } = useRequireAuth();
@@ -63,6 +65,16 @@ export default function AnalyticsPage() {
     queryFn: fetchChannels,
     staleTime: Infinity,
     enabled: isAuthenticated && isReady,
+  });
+
+  const anomaliesQuery = useQuery({
+    queryKey: ["analytics", "anomalies", salesRange.start, salesRange.end],
+    queryFn: () => fetchAnomalies({
+      start: salesRange.start,
+      end: salesRange.end,
+    }),
+    enabled: isAuthenticated && isReady,
+    staleTime: 2 * 60 * 1000, // 2 minutos
   });
 
   const hourlyData = useMemo(() => {
@@ -156,6 +168,7 @@ export default function AnalyticsPage() {
             productTopQuery.refetch();
             salesHourQuery.refetch();
             channelsQuery.refetch();
+            anomaliesQuery.refetch();
           }}
         />
 
@@ -169,6 +182,13 @@ export default function AnalyticsPage() {
           <ChannelPie data={channelData} />
         </div>
         <AnalyticsTable rows={productRows} />
+        
+        {/* Detector de Anomalias */}
+        <AnomalyDetector 
+          data={anomaliesQuery.data || null}
+          isLoading={anomaliesQuery.isLoading}
+          isError={anomaliesQuery.isError}
+        />
       </main>
     </div>
   );
