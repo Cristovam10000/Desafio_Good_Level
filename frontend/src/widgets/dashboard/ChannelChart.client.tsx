@@ -11,7 +11,7 @@ const CartesianGrid = dynamic(() => import("recharts").then((m) => m.CartesianGr
 const Tooltip = dynamic(() => import("recharts").then((m) => m.Tooltip), { ssr: false });
 const ResponsiveContainer = dynamic(() => import("recharts").then((m) => m.ResponsiveContainer), { ssr: false });
 
-type ChannelPoint = { name: string; value: number };
+type ChannelPoint = { name: string; value: number; id?: string | number };
 
 type ChannelChartProps = {
   data: ChannelPoint[];

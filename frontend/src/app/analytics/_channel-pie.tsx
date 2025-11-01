@@ -12,6 +12,7 @@ const ResponsiveContainer = dynamic(() => import("recharts").then((m) => m.Respo
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 type ChannelDatum = {
+  id: number | string;
   name: string;
   value: number;
 };
@@ -24,7 +25,7 @@ export default function ChannelPie({ data }: { data: ChannelDatum[] }) {
         <PieChart>
           <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} paddingAngle={4}>
             {data.map((entry, index) => (
-              <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+              <Cell key={`${entry.id}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
           <Tooltip />

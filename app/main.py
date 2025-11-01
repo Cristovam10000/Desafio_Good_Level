@@ -32,8 +32,8 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -42,23 +42,20 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def _log_auth_requests(request: Request, call_next):
         if request.url.path.startswith("/auth"):
-            logger.info(
-                "AUTH inbound | method=%s path=%s origin=%s referer=%s headers=%s",
-                request.method,
-                request.url.path,
-                request.headers.get("origin"),
-                request.headers.get("referer"),
-                {k: v for k, v in request.headers.items() if k in {"origin", "referer", "content-type", "host"}},
+            print(
+                "AUTH inbound | method=%s path=%s origin=%s"
+                % (request.method, request.url.path, request.headers.get("origin")),
             )
         response = await call_next(request)
         if request.url.path.startswith("/auth"):
-            logger.info(
-                "AUTH outbound | method=%s path=%s status=%s acao=%s vary=%s",
-                request.method,
-                request.url.path,
-                response.status_code,
-                response.headers.get("access-control-allow-origin"),
-                response.headers.get("vary"),
+            print(
+                "AUTH outbound | method=%s path=%s status=%s acao=%s"
+                % (
+                    request.method,
+                    request.url.path,
+                    response.status_code,
+                    response.headers.get("access-control-allow-origin"),
+                ),
             )
         return response
 

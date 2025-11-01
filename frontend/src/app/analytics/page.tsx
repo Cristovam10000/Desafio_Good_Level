@@ -64,17 +64,25 @@ export default function AnalyticsPage() {
     const channelMap = new Map<number, string>();
     channelsQuery.data?.forEach((channel) => channelMap.set(channel.id, channel.name));
 
-    const totals = new Map<number, number>();
+    const totals = new Map<string, { id: string; name: string; value: number }>();
     salesHourQuery.data?.forEach((row) => {
       if (row.channel_id == null) return;
-      const total = totals.get(row.channel_id) ?? 0;
-      totals.set(row.channel_id, total + (row.revenue ?? 0));
+      const channelId = row.channel_id;
+      const name = channelMap.get(channelId) ?? `Canal ${channelId}`;
+      const key = name.toLowerCase();
+      const current = totals.get(key) ?? { id: String(channelId), name, value: 0 };
+      totals.set(key, {
+        id: current.id,
+        name,
+        value: current.value + (row.revenue ?? 0),
+      });
     });
 
-    return Array.from(totals.entries())
-      .map(([id, value]) => ({
-        name: channelMap.get(id) ?? `Canal ${id}`,
-        value: Number(value.toFixed(2)),
+    return Array.from(totals.values())
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        value: Number(entry.value.toFixed(2)),
       }))
       .sort((a, b) => b.value - a.value);
   }, [salesHourQuery.data, channelsQuery.data]);

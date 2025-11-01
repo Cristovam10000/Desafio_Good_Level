@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: challenge
       POSTGRES_PASSWORD: challenge_2024
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ../infra/sql/database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -52,7 +52,7 @@ services:
       CUBEJS_DB_NAME: challenge_db
       CUBEJS_DB_USER: challenge
       CUBEJS_DB_PASS: challenge_2024
-      CUBEJS_API_SECRET: super_secret_long_123
+      CUBEJS_API_SECRET: gLzCoo4yNXxwbaJqNPsqjaYQdpRLQx9Y8Hk1WHymgkM
       CUBEJS_CACHE_AND_QUEUE_DRIVER: cubestore
       CUBEJS_CUBESTORE_HOST: cubestore
       CUBEJS_CUBESTORE_PORT: 9999
@@ -89,7 +89,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://challenge:challenge_2024@postgres:5432/challenge_db
       CUBE_API_URL: http://cube:4000/cubejs-api
-      CUBE_API_TOKEN: super_secret_long_123
+      CUBE_API_TOKEN: gLzCoo4yNXxwbaJqNPsqjaYQdpRLQx9Y8Hk1WHymgkM
       JWT_SECRET: coloque_um_grande_aqui_____________________________
       JWT_REFRESH_SECRET: outro_grande________________________________
       JWT_SHARE_SECRET: outro_mais___________________________________

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import logging
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -173,7 +174,14 @@ async def analytics_insights(
     try:
         ai_payload = await generate_dataset_insights(dataset)
     except AIIntegrationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logging.warning("AI insights indisponiveis: %s", exc)
+        response_payload["ok"] = False
+        response_payload["insights"] = [
+            "Insights automáticos indisponíveis no momento. Configure a camada de IA para habilitá-los."
+        ]
+        response_payload["raw_text"] = None
+        response_payload["insights_error"] = str(exc)
+        return response_payload
 
     response_payload.update(ai_payload)
     return response_payload

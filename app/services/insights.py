@@ -17,6 +17,11 @@ from app.core.ai import generate_insights_text
 from app.infra.db import fetch_all
 
 
+# Timeouts ajustados para consultas mais pesadas em bases grandes
+HEAVY_QUERY_TIMEOUT_MS = 6000
+DEFAULT_QUERY_TIMEOUT_MS = 1500
+
+
 def _parse_date(value: str) -> date:
     """Parseia strings ISO (aceitando 'Z') para objetos date."""
     try:
@@ -139,7 +144,7 @@ def _fetch_top_products(
             "store_ids": store_ids,
             "limit": limit,
         }
-        rows = fetch_all(sql, params, timeout_ms=1500)
+        rows = fetch_all(sql, params, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
         return pd.DataFrame(rows)
 
     sql_mv = """
@@ -161,7 +166,7 @@ def _fetch_top_products(
         "limit": limit,
     }
     try:
-        rows = fetch_all(sql_mv, params_mv, timeout_ms=1500)
+        rows = fetch_all(sql_mv, params_mv, timeout_ms=DEFAULT_QUERY_TIMEOUT_MS)
     except ProgrammingError as exc:
         if "UndefinedTable" not in str(exc):
             raise
@@ -186,7 +191,7 @@ def _fetch_top_products(
             "end_dt": end_dt.isoformat(),
             "limit": limit,
         }
-        rows = fetch_all(sql_raw, params_raw, timeout_ms=3000)
+        rows = fetch_all(sql_raw, params_raw, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
     return pd.DataFrame(rows)
 
 
@@ -256,7 +261,7 @@ def _fetch_delivery_stats(
         LIMIT :limit
         """
         try:
-            rows = fetch_all(sql, params, timeout_ms=1500)
+            rows = fetch_all(sql, params, timeout_ms=DEFAULT_QUERY_TIMEOUT_MS)
         except ProgrammingError as exc:
             if "UndefinedTable" not in str(exc):
                 raise
@@ -290,10 +295,10 @@ def _fetch_delivery_stats(
             }
             if city:
                 params_raw["city"] = city
-            rows = fetch_all(sql_raw, params_raw, timeout_ms=3000)
+            rows = fetch_all(sql_raw, params_raw, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
         return pd.DataFrame(rows)
 
-    rows = fetch_all(sql, params, timeout_ms=1500)
+    rows = fetch_all(sql, params, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
     return pd.DataFrame(rows)
 
 

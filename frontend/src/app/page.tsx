@@ -135,19 +135,27 @@ export default function DashboardPage() {
       channels.set(channel.id, channel.name);
     });
 
-    const totals = new Map<number, number>();
+    const totals = new Map<string, { id: string; name: string; value: number }>();
     salesHourQuery.data?.forEach((row) => {
       if (row.channel_id == null) {
         return;
       }
-      const value = totals.get(row.channel_id) ?? 0;
-      totals.set(row.channel_id, value + (row.revenue ?? 0));
+      const channelId = row.channel_id;
+      const name = channels.get(channelId) ?? `Canal ${channelId}`;
+      const key = name.toLowerCase();
+      const current = totals.get(key) ?? { id: String(channelId), name, value: 0 };
+      totals.set(key, {
+        id: current.id,
+        name,
+        value: current.value + (row.revenue ?? 0),
+      });
     });
 
-    return Array.from(totals.entries())
-      .map(([channelId, value]) => ({
-        name: channels.get(channelId) ?? `Canal ${channelId}`,
-        value: Number(value.toFixed(2)),
+    return Array.from(totals.values())
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        value: Number(entry.value.toFixed(2)),
       }))
       .sort((a, b) => b.value - a.value);
   }, [salesHourQuery.data, channelsQuery.data]);

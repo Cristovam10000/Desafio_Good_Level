@@ -6,6 +6,9 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sales_status_date
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sales_store_channel_date
   ON sales (store_id, channel_id, created_at);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sales_store_date
+  ON sales (store_id, created_at);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sales_delivery_seconds
   ON sales (delivery_seconds)
   WHERE delivery_seconds IS NOT NULL;
