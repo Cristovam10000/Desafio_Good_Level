@@ -285,3 +285,254 @@ async def detect_sales_anomalies(
     result["ok"] = True
     # Cache de 2 minutos com SWR de 5 minutos (dados mais dinâmicos)
     return etag_json(request, result, max_age=120, swr=300)
+
+
+# -----------------------------------------------------------------------------
+# Análises Detalhadas de Estrutura de Vendas
+# -----------------------------------------------------------------------------
+
+@router.get("/top-additions")
+async def get_top_additions(
+    request: Request,
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    store_id: Optional[int] = Query(None),
+    user: AccessClaims = Depends(require_roles("analyst", "manager", "admin")),
+) -> Dict[str, Any]:
+    """
+    Retorna os top 5 itens/adicionais mais vendidos.
+    Analisa a tabela items para identificar produtos mais populares.
+    """
+    from app.infra.db import fetch_all
+    
+    if not start or not end:
+        start, end = _default_period(30)
+    _validate_range(start, end)
+    
+    allowed_store_ids = user.stores or []
+    
+    sql = """
+    SELECT 
+        i.name AS item_name,
+        COUNT(*)::int AS quantidade_vendas,
+        SUM(ips.price)::float AS receita_total,
+        AVG(ips.price)::float AS preco_medio
+    FROM item_product_sales ips
+    JOIN items i ON i.id = ips.item_id
+    JOIN product_sales ps ON ps.id = ips.product_sale_id
+    JOIN sales s ON s.id = ps.sale_id
+    WHERE s.sale_status_desc = 'COMPLETED'
+        AND s.created_at >= :start_dt
+        AND s.created_at < :end_dt
+    """
+    
+    params = {"start_dt": start, "end_dt": end}
+    
+    if store_id is not None:
+        if allowed_store_ids and store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Loja não autorizada")
+        sql += " AND s.store_id = :store_id"
+        params["store_id"] = store_id
+    elif allowed_store_ids:
+        sql += " AND s.store_id = ANY(:store_ids)"
+        params["store_ids"] = allowed_store_ids
+    
+    sql += """
+    GROUP BY i.name
+    ORDER BY quantidade_vendas DESC
+    LIMIT 5
+    """
+    
+    data = fetch_all(sql, params)
+    
+    return etag_json(
+        request,
+        {"ok": True, "data": data, "period": {"start": start, "end": end}},
+        max_age=300,
+        swr=600,
+    )
+
+
+@router.get("/top-removals")
+async def get_top_removals(
+    request: Request,
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    store_id: Optional[int] = Query(None),
+    user: AccessClaims = Depends(require_roles("analyst", "manager", "admin")),
+) -> Dict[str, Any]:
+    """
+    Retorna produtos com menor quantidade vendida (indicando possível problema ou baixa procura).
+    """
+    from app.infra.db import fetch_all
+    
+    if not start or not end:
+        start, end = _default_period(30)
+    _validate_range(start, end)
+    
+    allowed_store_ids = user.stores or []
+    
+    sql = """
+    SELECT 
+        p.name AS product_name,
+        COUNT(ps.id)::int AS quantidade_vendas,
+        SUM(ps.quantity)::float AS quantidade_itens
+    FROM products p
+    LEFT JOIN product_sales ps ON ps.product_id = p.id
+    LEFT JOIN sales s ON s.id = ps.sale_id AND s.sale_status_desc = 'COMPLETED'
+        AND s.created_at >= :start_dt
+        AND s.created_at < :end_dt
+    """
+    
+    params = {"start_dt": start, "end_dt": end}
+    
+    if store_id is not None:
+        if allowed_store_ids and store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Loja não autorizada")
+        sql += " AND (s.store_id = :store_id OR s.store_id IS NULL)"
+        params["store_id"] = store_id
+    elif allowed_store_ids:
+        sql += " AND (s.store_id = ANY(:store_ids) OR s.store_id IS NULL)"
+        params["store_ids"] = allowed_store_ids
+    
+    sql += """
+    GROUP BY p.id, p.name
+    HAVING COUNT(ps.id) > 0
+    ORDER BY quantidade_vendas ASC
+    LIMIT 5
+    """
+    
+    data = fetch_all(sql, params)
+    
+    return etag_json(
+        request,
+        {"ok": True, "data": data, "period": {"start": start, "end": end}},
+        max_age=300,
+        swr=600,
+    )
+
+
+@router.get("/delivery-time-by-region")
+async def get_delivery_time_by_region(
+    request: Request,
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    store_id: Optional[int] = Query(None),
+    user: AccessClaims = Depends(require_roles("analyst", "manager", "admin")),
+) -> Dict[str, Any]:
+    """
+    Retorna tempo médio de entrega por bairro (região).
+    """
+    from app.infra.db import fetch_all
+    
+    if not start or not end:
+        start, end = _default_period(30)
+    _validate_range(start, end)
+    
+    allowed_store_ids = user.stores or []
+    
+    sql = """
+    SELECT 
+        da.neighborhood AS regiao,
+        AVG(s.delivery_seconds / 60.0)::float AS tempo_medio_minutos,
+        COUNT(DISTINCT s.id)::int AS total_entregas,
+        MIN(s.delivery_seconds / 60.0)::float AS tempo_minimo,
+        MAX(s.delivery_seconds / 60.0)::float AS tempo_maximo
+    FROM sales s
+    JOIN delivery_addresses da ON da.sale_id = s.id
+    WHERE s.sale_status_desc = 'COMPLETED'
+        AND s.delivery_seconds IS NOT NULL
+        AND s.delivery_seconds > 0
+        AND da.neighborhood IS NOT NULL
+        AND LENGTH(da.neighborhood) > 3
+        AND s.created_at >= :start_dt
+        AND s.created_at < :end_dt
+    """
+    
+    params = {"start_dt": start, "end_dt": end}
+    
+    if store_id is not None:
+        if allowed_store_ids and store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Loja não autorizada")
+        sql += " AND s.store_id = :store_id"
+        params["store_id"] = store_id
+    elif allowed_store_ids:
+        sql += " AND s.store_id = ANY(:store_ids)"
+        params["store_ids"] = allowed_store_ids
+    
+    sql += """
+    GROUP BY da.neighborhood
+    HAVING COUNT(DISTINCT s.id) >= 5
+    ORDER BY tempo_medio_minutos DESC
+    LIMIT 10
+    """
+    
+    data = fetch_all(sql, params)
+    
+    return etag_json(
+        request,
+        {"ok": True, "data": data, "period": {"start": start, "end": end}},
+        max_age=300,
+        swr=600,
+    )
+
+
+@router.get("/payment-mix-by-channel")
+async def get_payment_mix_by_channel(
+    request: Request,
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    store_id: Optional[int] = Query(None),
+    user: AccessClaims = Depends(require_roles("analyst", "manager", "admin")),
+) -> Dict[str, Any]:
+    """
+    Retorna mix de formas de pagamento por canal de venda.
+    """
+    from app.infra.db import fetch_all
+    
+    if not start or not end:
+        start, end = _default_period(30)
+    _validate_range(start, end)
+    
+    allowed_store_ids = user.stores or []
+    
+    sql = """
+    SELECT 
+        c.name AS canal,
+        pt.description AS forma_pagamento,
+        COUNT(*)::int AS quantidade_vendas,
+        SUM(p.value)::float AS valor_total,
+        ROUND((COUNT(*)::numeric / SUM(COUNT(*)) OVER (PARTITION BY c.name) * 100), 1)::float AS percentual
+    FROM payments p
+    JOIN sales s ON s.id = p.sale_id
+    JOIN payment_types pt ON pt.id = p.payment_type_id
+    JOIN channels c ON c.id = s.channel_id
+    WHERE s.sale_status_desc = 'COMPLETED'
+        AND s.created_at >= :start_dt
+        AND s.created_at < :end_dt
+    """
+    
+    params = {"start_dt": start, "end_dt": end}
+    
+    if store_id is not None:
+        if allowed_store_ids and store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Loja não autorizada")
+        sql += " AND s.store_id = :store_id"
+        params["store_id"] = store_id
+    elif allowed_store_ids:
+        sql += " AND s.store_id = ANY(:store_ids)"
+        params["store_ids"] = allowed_store_ids
+    
+    sql += """
+    GROUP BY c.name, pt.description
+    ORDER BY c.name, quantidade_vendas DESC
+    """
+    
+    data = fetch_all(sql, params)
+    
+    return etag_json(
+        request,
+        {"ok": True, "data": data, "period": {"start": start, "end": end}},
+        max_age=300,
+        swr=600,
+    )
