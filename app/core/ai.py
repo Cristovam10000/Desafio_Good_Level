@@ -12,35 +12,32 @@ class AIIntegrationError(RuntimeError):
 
 def _load_dependencies() -> tuple:
     try:
-        from langchain.prompts import PromptTemplate  # type: ignore
-        from langchain.chains import LLMChain  # type: ignore
+        from langchain_core.prompts import ChatPromptTemplate  # type: ignore
         from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore
     except ImportError as exc:  # pragma: no cover - feedback direto
         raise AIIntegrationError(
             "Dependências de IA não encontradas. Instale-as com "
             "`pip install langchain langchain-google-genai google-generativeai`."
         ) from exc
-    return PromptTemplate, LLMChain, ChatGoogleGenerativeAI
+    return ChatPromptTemplate, ChatGoogleGenerativeAI
 
 
 @lru_cache(maxsize=1)
-def _get_chain() -> "LLMChain":
+def _get_chain():
     if not settings.GOOGLE_API_KEY:
         raise AIIntegrationError(
             "GOOGLE_API_KEY não configurada. Defina a chave do Gemini para habilitar os insights."
         )
 
-    PromptTemplate, LLMChain, ChatGoogleGenerativeAI = _load_dependencies()
+    ChatPromptTemplate, ChatGoogleGenerativeAI = _load_dependencies()
 
-    prompt = PromptTemplate(
-        input_variables=["data"],
-        template=(
-            "Você é um analista de dados para uma rede de restaurantes.\n"
-            "Receberá dados tabulares sobre vendas, produtos e entregas no formato Markdown.\n"
-            "{data}\n\n"
-            "Gere exatamente três insights acionáveis (tendências, oportunidades ou anomalias) "
-            "e uma recomendação de negócio. Seja objetivo e cite números relevantes."
-        ),
+    prompt = ChatPromptTemplate.from_template(
+        "Você é um analista de dados para restaurantes.\n"
+        "Analise os dados abaixo e gere EXATAMENTE 3 insights curtos (máximo 2 frases cada).\n"
+        "Formato: numeração simples (1., 2., 3.) seguida do insight.\n"
+        "Seja direto, objetivo e cite números relevantes.\n\n"
+        "Dados:\n{data}\n\n"
+        "Responda APENAS com os 3 insights numerados, SEM introduções ou conclusões."
     )
 
     llm = ChatGoogleGenerativeAI(
@@ -50,7 +47,7 @@ def _get_chain() -> "LLMChain":
         max_output_tokens=settings.GEMINI_MAX_OUTPUT_TOKENS,
     )
 
-    return LLMChain(llm=llm, prompt=prompt)
+    return prompt | llm
 
 
 async def generate_insights_text(data: str) -> str:
@@ -63,7 +60,8 @@ async def generate_insights_text(data: str) -> str:
     chain = _get_chain()
 
     def _runner() -> str:
-        return chain.run(data=data).strip()
+        result = chain.invoke({"data": data})
+        return result.content.strip() if hasattr(result, 'content') else ""
 
     loop = asyncio.get_running_loop()
     try:

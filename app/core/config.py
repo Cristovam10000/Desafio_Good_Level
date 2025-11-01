@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = None
     GEMINI_MODEL_NAME: str = "gemini-2.5-flash"
     GEMINI_TEMPERATURE: float = 0.2
-    GEMINI_MAX_OUTPUT_TOKENS: int = 1024
+    GEMINI_MAX_OUTPUT_TOKENS: int = 8192  # Máximo para flash models
 
     @field_validator("JWT_SECRET", "JWT_REFRESH_SECRET", "JWT_SHARE_SECRET")
     @classmethod

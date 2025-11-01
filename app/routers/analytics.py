@@ -121,6 +121,7 @@ async def analytics_insights(
     end: Optional[str] = Query(None, description="Fim do período (YYYY-MM-DD)"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal"),
+    channel_ids: Optional[str] = Query(None, description="Lista de canais separados por vírgula"),
     city: Optional[str] = Query(None, description="Filtrar entregas por cidade"),
     top_products: int = Query(5, ge=1, le=20, description="Quantidade de produtos para enviar ao modelo"),
     top_locations: int = Query(5, ge=1, le=20, description="Quantidade de bairros para enviar ao modelo"),
@@ -135,6 +136,23 @@ async def analytics_insights(
     _validate_range(start, end)
 
     allowed_store_ids = user.stores or []
+    channel_ids_list: Optional[list[int]] = None
+    if channel_ids:
+        try:
+            parsed = [int(value.strip()) for value in channel_ids.split(",") if value.strip()]
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="channel_ids deve conter apenas números separados por vírgula.") from exc
+        channel_ids_list = parsed or None
+
+    if channel_id is not None:
+        if channel_ids_list is None:
+            channel_ids_list = [channel_id]
+        elif channel_id not in channel_ids_list:
+            channel_ids_list.append(channel_id)
+
+    if channel_ids_list:
+        channel_ids_list = sorted(set(channel_ids_list))
+
     if store_id is not None:
         if allowed_store_ids and store_id not in allowed_store_ids:
             raise HTTPException(status_code=403, detail="Loja não autorizada para este usuário.")
@@ -147,7 +165,7 @@ async def analytics_insights(
             start,
             end,
             store_ids=effective_store_ids,
-            channel_id=channel_id,
+            channel_ids=channel_ids_list,
             city=city,
             top_products=top_products,
             top_locations=top_locations,
@@ -161,6 +179,7 @@ async def analytics_insights(
         "filters": {
             "store_ids": effective_store_ids,
             "channel_id": channel_id,
+            "channel_ids": channel_ids_list,
             "city": city,
         },
         "preview": dataset.preview(),
@@ -177,7 +196,7 @@ async def analytics_insights(
         logging.warning("AI insights indisponiveis: %s", exc)
         response_payload["ok"] = False
         response_payload["insights"] = [
-            "Insights automáticos indisponíveis no momento. Configure a camada de IA para habilitá-los."
+            "Insights automaticos indisponiveis no momento. Configure a camada de IA para habilita-los."
         ]
         response_payload["raw_text"] = None
         response_payload["insights_error"] = str(exc)

@@ -7,7 +7,7 @@ ao modelo do Gemini.
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 import pandas as pd
 
@@ -49,7 +49,7 @@ def _fetch_sales_daily(
     start_dt: datetime,
     end_dt: datetime,
     store_ids: Optional[list[int]],
-    channel_id: Optional[int],
+    channel_ids: Optional[Sequence[int]],
 ) -> pd.DataFrame:
     """Values agregados por dia usando `mv_sales_hour` ou fallback bruto."""
     where_mv = ["bucket_hour >= :start_dt", "bucket_hour < :end_dt"]
@@ -61,9 +61,9 @@ def _fetch_sales_daily(
     if store_ids:
         where_mv.append("store_id = ANY(:store_ids)")
         params["store_ids"] = store_ids
-    if channel_id is not None:
-        where_mv.append("channel_id = :channel_id")
-        params["channel_id"] = channel_id
+    if channel_ids:
+        where_mv.append("channel_id = ANY(:channel_ids)")
+        params["channel_ids"] = list(channel_ids)
 
     sql_mv = f"""
     SELECT
@@ -93,8 +93,8 @@ def _fetch_sales_daily(
         ]
         if store_ids:
             where_raw.append("s.store_id = ANY(:store_ids)")
-        if channel_id is not None:
-            where_raw.append("s.channel_id = :channel_id")
+        if channel_ids:
+            where_raw.append("s.channel_id = ANY(:channel_ids)")
 
         sql_raw = f"""
         SELECT
@@ -118,11 +118,13 @@ def _fetch_top_products(
     end_dt: datetime,
     limit: int,
     store_ids: Optional[list[int]],
+    channel_ids: Optional[Sequence[int]],
 ) -> pd.DataFrame:
     """Lista produtos mais relevantes usando MV ou fallback por tabela."""
     if store_ids:
         sql = """
         SELECT
+          p.id                                 AS product_id,
           p.name                               AS product_name,
           SUM(ps.total_price)::float           AS revenue,
           SUM(ps.quantity)::float              AS qty,
@@ -134,7 +136,11 @@ def _fetch_top_products(
           AND s.created_at >= :start_dt
           AND s.created_at < :end_dt
           AND s.store_id = ANY(:store_ids)
-        GROUP BY p.name
+        """
+        if channel_ids:
+            sql += "\n          AND s.channel_id = ANY(:channel_ids)"
+        sql += """
+        GROUP BY p.id, p.name
         ORDER BY revenue DESC
         LIMIT :limit
         """
@@ -144,11 +150,42 @@ def _fetch_top_products(
             "store_ids": store_ids,
             "limit": limit,
         }
+        if channel_ids:
+            params["channel_ids"] = list(channel_ids)
         rows = fetch_all(sql, params, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
+        return pd.DataFrame(rows)
+
+    if channel_ids:
+        sql_raw = """
+        SELECT
+          p.id                                 AS product_id,
+          p.name                               AS product_name,
+          SUM(ps.total_price)::float           AS revenue,
+          SUM(ps.quantity)::float              AS qty,
+          COUNT(DISTINCT ps.sale_id)::int      AS orders
+        FROM product_sales ps
+        JOIN sales s      ON s.id = ps.sale_id
+        JOIN products p   ON p.id = ps.product_id
+        WHERE s.sale_status_desc = 'COMPLETED'
+          AND s.created_at >= :start_dt
+          AND s.created_at < :end_dt
+          AND s.channel_id = ANY(:channel_ids)
+        GROUP BY p.id, p.name
+        ORDER BY revenue DESC
+        LIMIT :limit
+        """
+        params_raw = {
+            "start_dt": start_dt.isoformat(),
+            "end_dt": end_dt.isoformat(),
+            "limit": limit,
+            "channel_ids": list(channel_ids),
+        }
+        rows = fetch_all(sql_raw, params_raw, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
         return pd.DataFrame(rows)
 
     sql_mv = """
     SELECT
+      product_id,
       MAX(product_name) AS product_name,
       SUM(revenue)::float AS revenue,
       SUM(qty)::float     AS qty,
@@ -172,6 +209,7 @@ def _fetch_top_products(
             raise
         sql_raw = """
         SELECT
+          p.id                                 AS product_id,
           p.name                               AS product_name,
           SUM(ps.total_price)::float           AS revenue,
           SUM(ps.quantity)::float              AS qty,
@@ -182,7 +220,7 @@ def _fetch_top_products(
         WHERE s.sale_status_desc = 'COMPLETED'
           AND s.created_at >= :start_dt
           AND s.created_at < :end_dt
-        GROUP BY p.name
+        GROUP BY p.id, p.name
         ORDER BY revenue DESC
         LIMIT :limit
         """
@@ -201,6 +239,7 @@ def _fetch_delivery_stats(
     limit: int,
     city: Optional[str],
     store_ids: Optional[list[int]],
+    channel_ids: Optional[Sequence[int]],
 ) -> pd.DataFrame:
     """Estatísticas de entrega (p90) com fallback caso MV não exista."""
     if store_ids:
@@ -213,6 +252,8 @@ def _fetch_delivery_stats(
         ]
         if city:
             where.append("da.city = :city")
+        if channel_ids:
+            where.append("s.channel_id = ANY(:channel_ids)")
         sql = f"""
         SELECT
           DATE(s.created_at)                                            AS bucket_day,
@@ -236,44 +277,20 @@ def _fetch_delivery_stats(
         }
         if city:
             params["city"] = city
+        if channel_ids:
+            params["channel_ids"] = list(channel_ids)
     else:
-        where = ["bucket_day >= :start_date", "bucket_day < :end_date"]
-        params = {
-            "start_date": start_dt.date().isoformat(),
-            "end_date": (end_dt.date()).isoformat(),
-            "limit": limit,
-        }
-        if city:
-            where.append("city = :city")
-            params["city"] = city
-
-        sql = f"""
-        SELECT
-          bucket_day,
-          city,
-          neighborhood,
-          deliveries,
-          avg_delivery_minutes,
-          p90_delivery_minutes
-        FROM mv_delivery_p90
-        WHERE {" AND ".join(where)}
-        ORDER BY p90_delivery_minutes DESC, deliveries DESC
-        LIMIT :limit
-        """
-        try:
-            rows = fetch_all(sql, params, timeout_ms=DEFAULT_QUERY_TIMEOUT_MS)
-        except ProgrammingError as exc:
-            if "UndefinedTable" not in str(exc):
-                raise
-            where_raw = [
+        if channel_ids:
+            where = [
                 "s.sale_status_desc = 'COMPLETED'",
                 "s.delivery_seconds IS NOT NULL",
                 "s.created_at >= :start_dt",
                 "s.created_at < :end_dt",
+                "s.channel_id = ANY(:channel_ids)",
             ]
             if city:
-                where_raw.append("da.city = :city")
-            sql_raw = f"""
+                where.append("da.city = :city")
+            sql = f"""
             SELECT
               DATE(s.created_at)                                            AS bucket_day,
               da.city,
@@ -283,7 +300,7 @@ def _fetch_delivery_stats(
               PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY s.delivery_seconds)::float / 60.0 AS p90_delivery_minutes
             FROM sales s
             JOIN delivery_addresses da ON da.sale_id = s.id
-            WHERE {" AND ".join(where_raw)}
+            WHERE {" AND ".join(where)}
             GROUP BY DATE(s.created_at), da.city, da.neighborhood
             ORDER BY p90_delivery_minutes DESC, deliveries DESC
             LIMIT :limit
@@ -295,7 +312,68 @@ def _fetch_delivery_stats(
             }
             if city:
                 params_raw["city"] = city
-            rows = fetch_all(sql_raw, params_raw, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
+            params_raw["channel_ids"] = list(channel_ids)
+            rows = fetch_all(sql, params_raw, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
+        else:
+            where = ["bucket_day >= :start_date", "bucket_day < :end_date"]
+            params = {
+                "start_date": start_dt.date().isoformat(),
+                "end_date": (end_dt.date()).isoformat(),
+                "limit": limit,
+            }
+            if city:
+                where.append("city = :city")
+                params["city"] = city
+
+            sql = f"""
+            SELECT
+              bucket_day,
+              city,
+              neighborhood,
+              deliveries,
+              avg_delivery_minutes,
+              p90_delivery_minutes
+            FROM mv_delivery_p90
+            WHERE {" AND ".join(where)}
+            ORDER BY p90_delivery_minutes DESC, deliveries DESC
+            LIMIT :limit
+            """
+            try:
+                rows = fetch_all(sql, params, timeout_ms=DEFAULT_QUERY_TIMEOUT_MS)
+            except ProgrammingError as exc:
+                if "UndefinedTable" not in str(exc):
+                    raise
+                where_raw = [
+                    "s.sale_status_desc = 'COMPLETED'",
+                    "s.delivery_seconds IS NOT NULL",
+                    "s.created_at >= :start_dt",
+                    "s.created_at < :end_dt",
+                ]
+                if city:
+                    where_raw.append("da.city = :city")
+                sql_raw = f"""
+                SELECT
+                  DATE(s.created_at)                                            AS bucket_day,
+                  da.city,
+                  da.neighborhood,
+                  COUNT(*)                                                      AS deliveries,
+                  AVG(s.delivery_seconds)::float / 60.0                         AS avg_delivery_minutes,
+                  PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY s.delivery_seconds)::float / 60.0 AS p90_delivery_minutes
+                FROM sales s
+                JOIN delivery_addresses da ON da.sale_id = s.id
+                WHERE {" AND ".join(where_raw)}
+                GROUP BY DATE(s.created_at), da.city, da.neighborhood
+                ORDER BY p90_delivery_minutes DESC, deliveries DESC
+                LIMIT :limit
+                """
+                params_raw = {
+                    "start_dt": start_dt.isoformat(),
+                    "end_dt": end_dt.isoformat(),
+                    "limit": limit,
+                }
+                if city:
+                    params_raw["city"] = city
+                rows = fetch_all(sql_raw, params_raw, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
         return pd.DataFrame(rows)
 
     rows = fetch_all(sql, params, timeout_ms=HEAVY_QUERY_TIMEOUT_MS)
@@ -345,7 +423,7 @@ def build_dataset(
     end: str,
     *,
     store_ids: Optional[list[int]],
-    channel_id: Optional[int],
+    channel_ids: Optional[Sequence[int]],
     city: Optional[str],
     top_products: int,
     top_locations: int,
@@ -353,9 +431,9 @@ def build_dataset(
     """Carrega todos os recortes necessários para gerar insights."""
     start_dt, end_dt = _start_end(start, end)
 
-    sales_daily = _fetch_sales_daily(start_dt, end_dt, store_ids, channel_id)
-    top_products_df = _fetch_top_products(start_dt, end_dt, top_products, store_ids)
-    delivery_df = _fetch_delivery_stats(start_dt, end_dt, top_locations, city, store_ids)
+    sales_daily = _fetch_sales_daily(start_dt, end_dt, store_ids, channel_ids)
+    top_products_df = _fetch_top_products(start_dt, end_dt, top_products, store_ids, channel_ids)
+    delivery_df = _fetch_delivery_stats(start_dt, end_dt, top_locations, city, store_ids, channel_ids)
 
     return InsightsDataset(
         sales_daily=sales_daily,

@@ -46,6 +46,23 @@ def _validate_range(start: str, end: str) -> None:
         raise HTTPException(status_code=400, detail="'start' deve ser menor que 'end'.")
 
 
+def _parse_channel_ids(raw: Optional[str], single: Optional[int] = None) -> Optional[list[int]]:
+    ids: list[int] = []
+    if raw:
+        for chunk in raw.split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            try:
+                ids.append(int(chunk))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="channel_ids deve conter apenas números separados por vírgula.") from exc
+    if single is not None:
+        if single not in ids:
+            ids.append(single)
+    return ids or None
+
+
 # -----------------------------------------------------------------------------
 # Top products
 # -----------------------------------------------------------------------------
@@ -65,6 +82,7 @@ def top_products(
     offset: int = Query(0, ge=0, description="Offset para pagina├º├úo"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja espec├¡fica"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal espec├¡fico"),
+    channel_ids: Optional[str] = Query(None, description="Lista de canais separados por vírgula"),
 ):
     """
     Ranking simples de produtos vendidos diretamente das tabelas transacionais.
@@ -86,9 +104,10 @@ def top_products(
     if store_id is not None:
         where_clauses.append("s.store_id = :store_id")
         params["store_id"] = store_id
-    if channel_id is not None:
-        where_clauses.append("s.channel_id = :channel_id")
-        params["channel_id"] = channel_id
+    channel_ids_list = _parse_channel_ids(channel_ids, channel_id)
+    if channel_ids_list:
+        where_clauses.append("s.channel_id = ANY(:channel_ids)")
+        params["channel_ids"] = channel_ids_list
 
     sql = f"""
         SELECT
@@ -130,6 +149,7 @@ def sales_hour(
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal"),
+    channel_ids: Optional[str] = Query(None, description="Lista de canais separados por vírgula"),
     limit: int = Query(10000, ge=1, le=100000),
 ):
     """Consulta `mv_sales_hour`; se ausente, agrega diretamente de `sales`."""
@@ -142,9 +162,10 @@ def sales_hour(
     if store_id is not None:
         where.append("store_id = :store_id")
         params["store_id"] = store_id
-    if channel_id is not None:
-        where.append("channel_id = :channel_id")
-        params["channel_id"] = channel_id
+    channel_ids_list = _parse_channel_ids(channel_ids, channel_id)
+    if channel_ids_list:
+        where.append("channel_id = ANY(:channel_ids)")
+        params["channel_ids"] = channel_ids_list
 
     sql_mv = f"""
         SELECT
@@ -175,8 +196,8 @@ def sales_hour(
     ]
     if store_id is not None:
         where_raw.append("s.store_id = :store_id")
-    if channel_id is not None:
-        where_raw.append("s.channel_id = :channel_id")
+    if channel_ids_list:
+        where_raw.append("s.channel_id = ANY(:channel_ids)")
 
     sql_raw = f"""
         SELECT
@@ -243,7 +264,39 @@ def product_top(
         ORDER BY {order_by} {direction}
         LIMIT :limit
     """
-    return fetch_all(sql, params, timeout_ms=1500)
+    
+    try:
+        return fetch_all(sql, params, timeout_ms=1500)
+    except ProgrammingError as e:
+        if "UndefinedTable" not in str(e):
+            raise
+    
+    # Fallback: agrega direto de product_sales + sales
+    where_raw = [
+        "s.sale_status_desc = 'COMPLETED'",
+        "DATE(s.created_at) >= CAST(:start AS date)",
+        "DATE(s.created_at) < CAST(:end AS date)",
+    ]
+    if store_id is not None:
+        where_raw.append("s.store_id = :store_id")
+    
+    sql_fallback = f"""
+        SELECT
+            ps.product_id,
+            MAX(p.name) AS product_name,
+            SUM(ps.quantity)::float AS qty,
+            SUM(s.total_amount)::float AS revenue,
+            COUNT(DISTINCT s.id)::int AS orders
+        FROM product_sales ps
+        JOIN sales s ON s.id = ps.sale_id
+        JOIN products p ON p.id = ps.product_id
+        WHERE {" AND ".join(where_raw)}
+        GROUP BY ps.product_id
+        ORDER BY {order_by} {direction}
+        LIMIT :limit
+    """
+    
+    return fetch_all(sql_fallback, params, timeout_ms=3000)
 
 
 # -----------------------------------------------------------------------------
@@ -293,7 +346,41 @@ def delivery_p90(
         ORDER BY p90_delivery_minutes DESC
         LIMIT :limit
     """
-    return fetch_all(sql, params, timeout_ms=2000)
+    
+    try:
+        return fetch_all(sql, params, timeout_ms=2000)
+    except ProgrammingError as e:
+        if "UndefinedTable" not in str(e):
+            raise
+    
+    # Fallback: agrega direto de sales + delivery_addresses
+    where_raw = [
+        "s.sale_status_desc = 'COMPLETED'",
+        "s.delivery_seconds IS NOT NULL",
+        "DATE(s.created_at) >= CAST(:start AS date)",
+        "DATE(s.created_at) < CAST(:end AS date)",
+    ]
+    if city:
+        where_raw.append("da.city = :city")
+    
+    sql_fallback = f"""
+        SELECT
+          DATE(s.created_at) AS bucket_day,
+          da.city,
+          da.neighborhood,
+          COUNT(*)::int AS deliveries,
+          AVG((s.delivery_seconds/60.0))::float AS avg_delivery_minutes,
+          PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY (s.delivery_seconds/60.0))::float AS p90_delivery_minutes
+        FROM sales s
+        JOIN delivery_addresses da ON da.sale_id = s.id
+        WHERE {" AND ".join(where_raw)}
+        GROUP BY da.city, da.neighborhood, DATE(s.created_at)
+        HAVING COUNT(*) >= :min_deliveries
+        ORDER BY p90_delivery_minutes DESC
+        LIMIT :limit
+    """
+    
+    return fetch_all(sql_fallback, params, timeout_ms=3000)
 
 
 # -----------------------------------------------------------------------------
