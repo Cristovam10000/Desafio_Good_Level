@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # IA / Gemini
     GOOGLE_API_KEY: Optional[str] = None
-    GEMINI_MODEL_NAME: str = "gemini-1.5-flash"  # Modelo válido e rápido
+    GEMINI_MODEL_NAME: str = "gemini-2.0-flash-exp"  # Modelo mais recente
     GEMINI_TEMPERATURE: float = 0.2
     GEMINI_MAX_OUTPUT_TOKENS: int = 2048  # Reduzido para respostas mais rápidas
 
