@@ -47,36 +47,36 @@ export type DataRangeResponse = z.infer<typeof DataRangeResponseSchema>;
 export type StoreRow = z.infer<typeof StoresResponseSchema>[number];
 
 export async function fetchSalesHour(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/sales-hour", { params });
+  const response = await http.get("/utils/sales-hour", { params });
   return SalesHourResponseSchema.parse(response.data);
 }
 
 export async function fetchTopProducts(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/top-products", { params });
+  const response = await http.get("/utils/top-products", { params });
   return TopProductsResponseSchema.parse(response.data);
 }
 
 export async function fetchProductTop(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/product-top", { params });
+  const response = await http.get("/utils/product-top", { params });
   return ProductTopResponseSchema.parse(response.data);
 }
 
 export async function fetchDeliveryP90(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/delivery-p90", { params });
+  const response = await http.get("/utils/delivery-p90", { params });
   return DeliveryP90ResponseSchema.parse(response.data);
 }
 
 export async function fetchChannels() {
-  const response = await http.get("/specials/channels");
+  const response = await http.get("/channels");
   return ChannelsResponseSchema.parse(response.data);
 }
 
 export async function fetchDataRange() {
-  const response = await http.get("/specials/data-range");
+  const response = await http.get("/utils/data-range");
   return DataRangeResponseSchema.parse(response.data);
 }
 
 export async function fetchStores() {
-  const response = await http.get("/specials/stores");
+  const response = await http.get("/stores");
   return StoresResponseSchema.parse(response.data);
 }

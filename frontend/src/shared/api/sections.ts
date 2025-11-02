@@ -33,12 +33,12 @@ export type StorePerformanceRow = z.infer<typeof StorePerformanceRowSchema>;
 export type StoreTimeseriesRow = z.infer<typeof StoreTimeseriesRowSchema>;
 
 export async function fetchStoresTop(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/stores/top", { params });
+  const response = await http.get("/stores/performance", { params });
   return z.array(StorePerformanceRowSchema).parse(response.data);
 }
 
 export async function fetchStoreTimeseries(params: Record<string, unknown>) {
-  const response = await http.get("/specials/stores/timeseries", { params });
+  const response = await http.get("/stores/timeseries", { params });
   return z.array(StoreTimeseriesRowSchema).parse(response.data);
 }
 
@@ -65,12 +65,12 @@ export type SalesSummary = z.infer<typeof SalesSummarySchema>;
 export type SalesByChannelRow = z.infer<typeof SalesByChannelRowSchema>;
 
 export async function fetchSalesSummary(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/sales/summary", { params });
+  const response = await http.get("/sales/summary", { params });
   return SalesSummarySchema.parse(response.data);
 }
 
 export async function fetchSalesByChannel(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/sales/by-channel", { params });
+  const response = await http.get("/sales/by-channel", { params });
   return z.array(SalesByChannelRowSchema).parse(response.data);
 }
 
@@ -93,12 +93,12 @@ export type SalesByDayRow = z.infer<typeof SalesByDayRowSchema>;
 export type SalesByWeekdayRow = z.infer<typeof SalesByWeekdayRowSchema>;
 
 export async function fetchSalesByDay(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/sales/by-day", { params });
+  const response = await http.get("/sales/by-day", { params });
   return z.array(SalesByDayRowSchema).parse(response.data);
 }
 
 export async function fetchSalesByWeekday(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/sales/by-weekday", { params });
+  const response = await http.get("/sales/by-weekday", { params });
   return z.array(SalesByWeekdayRowSchema).parse(response.data);
 }
 
@@ -112,7 +112,7 @@ const DiscountReasonRowSchema = z.object({
 export type DiscountReasonRow = z.infer<typeof DiscountReasonRowSchema>;
 
 export async function fetchDiscountReasons(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/sales/discount-reasons", { params });
+  const response = await http.get("/sales/discount-reasons", { params });
   return z.array(DiscountReasonRowSchema).parse(response.data);
 }
 
@@ -140,7 +140,7 @@ export type ProductLowSellersRow = z.infer<typeof ProductLowSellersRowSchema>;
 export type ProductAddonsRow = z.infer<typeof ProductAddonsRowSchema>;
 
 export async function fetchProductsLowSellers(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/products/low-sellers", { params });
+  const response = await http.get("/products/low-sellers", { params });
   return z.array(ProductLowSellersRowSchema).parse(response.data);
 }
 
@@ -155,12 +155,12 @@ const ProductTopSellersRowSchema = z.object({
 export type ProductTopSellersRow = z.infer<typeof ProductTopSellersRowSchema>;
 
 export async function fetchProductsTopSellers(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/products/top-sellers", { params });
+  const response = await http.get("/products/top-sellers", { params });
   return z.array(ProductTopSellersRowSchema).parse(response.data);
 }
 
 export async function fetchProductsAddonsTop(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/products/addons/top", { params });
+  const response = await http.get("/products/addons/top", { params });
   return z.array(ProductAddonsRowSchema).parse(response.data);
 }
 
@@ -184,12 +184,12 @@ export type ProductWithMostCustomizationsRow = z.infer<typeof ProductWithMostCus
 export type ProductCombinationRow = z.infer<typeof ProductCombinationRowSchema>;
 
 export async function fetchProductsMostCustomized(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/products/most-customized", { params });
+  const response = await http.get("/products/most-customized", { params });
   return z.array(ProductWithMostCustomizationsRowSchema).parse(response.data);
 }
 
 export async function fetchProductCombinations(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/products/combinations", { params });
+  const response = await http.get("/products/combinations", { params });
   return z.array(ProductCombinationRowSchema).parse(response.data);
 }
 
@@ -217,12 +217,12 @@ export type DeliveryRegionsRow = z.infer<typeof DeliveryRegionsRowSchema>;
 export type DeliveryPercentiles = z.infer<typeof DeliveryPercentilesSchema>;
 
 export async function fetchDeliveryRegions(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/delivery/regions", { params });
+  const response = await http.get("/delivery/regions", { params });
   return z.array(DeliveryRegionsRowSchema).parse(response.data);
 }
 
 export async function fetchDeliveryPercentiles(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/delivery/percentiles", { params });
+  const response = await http.get("/delivery/percentiles", { params });
   return DeliveryPercentilesSchema.parse(response.data);
 }
 
@@ -253,17 +253,17 @@ export type DeliveryCityRankRow = z.infer<typeof DeliveryCityRankRowSchema>;
 export type DeliveryStoreRankRow = z.infer<typeof DeliveryStoreRankRowSchema>;
 
 export async function fetchDeliveryStats(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/delivery/stats", { params });
+  const response = await http.get("/delivery/stats", { params });
   return DeliveryStatsSchema.parse(response.data);
 }
 
 export async function fetchDeliveryCitiesRank(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/delivery/cities-rank", { params });
+  const response = await http.get("/delivery/cities-rank", { params });
   return z.array(DeliveryCityRankRowSchema).parse(response.data);
 }
 
 export async function fetchDeliveryStoresRank(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/delivery/stores-rank", { params });
+  const response = await http.get("/delivery/stores-rank", { params });
   return z.array(DeliveryStoreRankRowSchema).parse(response.data);
 }
 
@@ -292,12 +292,12 @@ export type PaymentMixRow = z.infer<typeof PaymentMixRowSchema>;
 export type NetVsGross = z.infer<typeof NetVsGrossSchema>;
 
 export async function fetchPaymentsMix(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/finance/payments-mix", { params });
+  const response = await http.get("/finance/payments-mix", { params });
   return z.array(PaymentMixRowSchema).parse(response.data);
 }
 
 export async function fetchNetVsGross(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/finance/net-vs-gross", { params });
+  const response = await http.get("/finance/net-vs-gross", { params });
   return NetVsGrossSchema.parse(response.data);
 }
 
@@ -326,12 +326,12 @@ export type PrepTimeRow = z.infer<typeof PrepTimeRowSchema>;
 export type CancellationsRow = z.infer<typeof CancellationsRowSchema>;
 
 export async function fetchPrepTime(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/ops/prep-time", { params });
+  const response = await http.get("/ops/prep-time", { params });
   return z.array(PrepTimeRowSchema).parse(response.data);
 }
 
 export async function fetchCancellations(params?: Record<string, unknown>) {
-  const response = await http.get("/specials/ops/cancellations", { params });
+  const response = await http.get("/ops/cancellations", { params });
   return z.array(CancellationsRowSchema).parse(response.data);
 }
 
@@ -347,7 +347,7 @@ const ChannelRowSchema = z.object({
 export type ChannelRow = z.infer<typeof ChannelRowSchema>;
 
 export async function fetchChannels() {
-  const response = await http.get("/specials/channels");
+  const response = await http.get("/channels");
   return z.array(ChannelRowSchema).parse(response.data);
 }
 

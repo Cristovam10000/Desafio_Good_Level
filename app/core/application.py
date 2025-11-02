@@ -17,7 +17,21 @@ from app.core.config import settings
 from app.core.logging import app_logger, init_app_logging
 from app.core.security import AccessClaims
 from app.infra.db import health_check
-from app.routers import analytics, auth, health, share, specials
+from app.routers import (
+    analytics,
+    auth,
+    channels,
+    delivery,
+    finance,
+    health,
+    operations,
+    products,
+    sales,
+    share,
+    specials,
+    stores,
+    utils,
+)
 
 
 class ApplicationBuilder:
@@ -103,6 +117,18 @@ class ApplicationBuilder:
         self.app.include_router(analytics.router)
         self.app.include_router(health.router)
         self.app.include_router(share.router)
+        
+        # Domain-specific routers (Clean Architecture)
+        self.app.include_router(sales.router)
+        self.app.include_router(products.router)
+        self.app.include_router(delivery.router)
+        self.app.include_router(stores.router)
+        self.app.include_router(channels.router)
+        self.app.include_router(operations.router)
+        self.app.include_router(finance.router)
+        self.app.include_router(utils.router)
+        
+        # Legacy specials router (to be gradually deprecated)
         self.app.include_router(specials.router)
 
         # Root routes

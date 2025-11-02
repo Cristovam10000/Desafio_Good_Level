@@ -1,19 +1,42 @@
-﻿"""Endpoints m├®tricos espec├¡ficos (materialized views + fallback em tabelas)."""
+﻿"""
+Endpoints métricos específicos (DEPRECADOS - Legacy endpoints).
+
+⚠️  AVISO DE DEPRECAÇÃO ⚠️
+Todos os endpoints neste módulo estão DEPRECADOS e serão removidos na versão 2.0.0.
+Por favor, migre para os novos endpoints organizados por domínio:
+
+- /sales/*      → Vendas
+- /products/*   → Produtos  
+- /delivery/*   → Entregas
+- /stores/*     → Lojas
+- /channels/*   → Canais
+- /ops/*        → Operações
+- /finance/*    → Finanças
+- /utils/*      → Utilitários
+
+Consulte a documentação em /docs para detalhes dos novos endpoints.
+"""
 
 from __future__ import annotations
 
+import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.exc import ProgrammingError
 
+from app.core.deprecation import add_deprecation_headers
 from app.core.security import AccessClaims, require_roles
 from app.infra.db import fetch_all, refresh_materialized_views
 
 
-router = APIRouter(prefix="/specials", tags=["specials"])
+router = APIRouter(
+    prefix="/specials",
+    tags=["specials (DEPRECATED)"],
+    deprecated=True,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -75,8 +98,9 @@ class TopProductOut(BaseModel):
     qty: float
 
 
-@router.get("/top-products", response_model=List[TopProductOut])
+@router.get("/top-products", response_model=List[TopProductOut], deprecated=True)
 def top_products(
+    response: Response,
     limit: int = Query(10, ge=1, le=100, description="Quantidade de produtos no ranking"),
     start: Optional[str] = Query(None, description="Data/hora inicial (inclusive)"),
     end: Optional[str] = Query(None, description="Data/hora final (exclusivo)"),
@@ -87,10 +111,24 @@ def top_products(
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
     """
+    ⚠️  DEPRECADO - Use /utils/top-products ou /products/top-sellers
+    
     Ranking simples de produtos vendidos diretamente das tabelas transacionais.
-    Mantido como fallback leve (sem depender de MV específica).
-    Filtra automaticamente pelas lojas do usuário autenticado.
+    
+    **Este endpoint será removido na versão 2.0.0**
+    
+    Migre para:
+    - `/utils/top-products` - Compatibilidade direta
+    - `/products/top-sellers` - Endpoint recomendado com mais métricas
     """
+    # Add deprecation headers
+    add_deprecation_headers(response, "/utils/top-products", "2.0.0")
+    warnings.warn(
+        "Endpoint /specials/top-products está deprecado. Use /utils/top-products ou /products/top-sellers",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    
     where_clauses = ["s.sale_status_desc = 'COMPLETED'"]
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
 
