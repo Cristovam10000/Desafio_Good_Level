@@ -186,7 +186,6 @@ export default function AnalyticsPage() {
             productTopQuery.refetch();
             salesHourQuery.refetch();
             channelsQuery.refetch();
-            anomaliesQuery.refetch();
           }}
           onFullPeriod={handleFullPeriod}
         />

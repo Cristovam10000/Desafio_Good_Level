@@ -150,16 +150,6 @@ export default function FilterPanel({
               <span className="hidden sm:inline">Analisar Período Completo</span>
               <span className="sm:hidden">Período Completo</span>
             </Button>
-
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={onRefresh}
-              className="h-10 w-10 p-0"
-              title="Atualizar"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
           </div>
         </div>
       </div>
