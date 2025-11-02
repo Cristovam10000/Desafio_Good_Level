@@ -28,12 +28,23 @@ const DataRangeResponseSchema = z.object({
   end_date: z.string(),
 });
 
+const StoresResponseSchema = z.array(
+  z.object({
+    id: z.number(),
+    name: z.string(),
+    city: z.string().nullable().optional(),
+    state: z.string().nullable().optional(),
+    is_active: z.boolean(),
+  })
+);
+
 export type SalesHourPoint = z.infer<typeof SalesHourPointSchema>;
 export type TopProductRow = z.infer<typeof TopProductsResponseSchema>[number];
 export type ProductTopRow = z.infer<typeof ProductTopResponseSchema>[number];
 export type DeliveryP90Row = z.infer<typeof DeliveryP90ResponseSchema>[number];
 export type ChannelRow = z.infer<typeof ChannelsResponseSchema>[number];
 export type DataRangeResponse = z.infer<typeof DataRangeResponseSchema>;
+export type StoreRow = z.infer<typeof StoresResponseSchema>[number];
 
 export async function fetchSalesHour(params?: Record<string, unknown>) {
   const response = await http.get("/specials/sales-hour", { params });
@@ -63,4 +74,9 @@ export async function fetchChannels() {
 export async function fetchDataRange() {
   const response = await http.get("/specials/data-range");
   return DataRangeResponseSchema.parse(response.data);
+}
+
+export async function fetchStores() {
+  const response = await http.get("/specials/stores");
+  return StoresResponseSchema.parse(response.data);
 }

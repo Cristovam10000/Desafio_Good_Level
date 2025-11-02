@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.exc import ProgrammingError
 
+from app.core.security import AccessClaims, require_roles
 from app.infra.db import fetch_all, refresh_materialized_views
 
 
@@ -79,14 +80,16 @@ def top_products(
     limit: int = Query(10, ge=1, le=100, description="Quantidade de produtos no ranking"),
     start: Optional[str] = Query(None, description="Data/hora inicial (inclusive)"),
     end: Optional[str] = Query(None, description="Data/hora final (exclusivo)"),
-    offset: int = Query(0, ge=0, description="Offset para pagina├º├úo"),
-    store_id: Optional[int] = Query(None, description="Filtrar por loja espec├¡fica"),
-    channel_id: Optional[int] = Query(None, description="Filtrar por canal espec├¡fico"),
+    offset: int = Query(0, ge=0, description="Offset para paginação"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
+    channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     channel_ids: Optional[str] = Query(None, description="Lista de canais separados por vírgula"),
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
     """
     Ranking simples de produtos vendidos diretamente das tabelas transacionais.
-    Mantido como fallback leve (sem depender de MV espec├¡fica).
+    Mantido como fallback leve (sem depender de MV específica).
+    Filtra automaticamente pelas lojas do usuário autenticado.
     """
     where_clauses = ["s.sale_status_desc = 'COMPLETED'"]
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
@@ -101,9 +104,17 @@ def top_products(
     params["start"] = start_dt.isoformat()
     params["end"] = end_dt.isoformat()
 
+    # FILTRO POR LOJAS DO USUÁRIO (OBRIGATÓRIO)
+    allowed_store_ids = user.stores or []
     if store_id is not None:
+        if store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Acesso negado à loja especificada")
         where_clauses.append("s.store_id = :store_id")
         params["store_id"] = store_id
+    elif allowed_store_ids:
+        where_clauses.append("s.store_id = ANY(:store_ids)")
+        params["store_ids"] = allowed_store_ids
+    
     channel_ids_list = _parse_channel_ids(channel_ids, channel_id)
     if channel_ids_list:
         where_clauses.append("s.channel_id = ANY(:channel_ids)")
@@ -145,23 +156,33 @@ class SalesHourRow(BaseModel):
 
 @router.get("/sales-hour", response_model=List[SalesHourRow])
 def sales_hour(
-    start: Optional[str] = Query(None, description="ISO8601 in├¡cio (default: agora-30d)"),
+    start: Optional[str] = Query(None, description="ISO8601 início (default: agora-30d)"),
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal"),
     channel_ids: Optional[str] = Query(None, description="Lista de canais separados por vírgula"),
     limit: int = Query(10000, ge=1, le=100000),
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
-    """Consulta `mv_sales_hour`; se ausente, agrega diretamente de `sales`."""
+    """Consulta `mv_sales_hour`; se ausente, agrega diretamente de `sales`. Filtra pelas lojas do usuário."""
     if not start or not end:
         start, end = _default_period(days=30)
     _validate_range(start, end)
 
     where = ["bucket_hour >= :start", "bucket_hour < :end"]
     params: Dict[str, Any] = {"start": start, "end": end, "limit": limit}
+    
+    # FILTRO POR LOJAS DO USUÁRIO (OBRIGATÓRIO)
+    allowed_store_ids = user.stores or []
     if store_id is not None:
+        if store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Acesso negado à loja especificada")
         where.append("store_id = :store_id")
         params["store_id"] = store_id
+    elif allowed_store_ids:
+        where.append("store_id = ANY(:store_ids)")
+        params["store_ids"] = allowed_store_ids
+    
     channel_ids_list = _parse_channel_ids(channel_ids, channel_id)
     if channel_ids_list:
         where.append("channel_id = ANY(:channel_ids)")
@@ -196,6 +217,9 @@ def sales_hour(
     ]
     if store_id is not None:
         where_raw.append("s.store_id = :store_id")
+    elif allowed_store_ids:
+        where_raw.append("s.store_id = ANY(:store_ids)")
+        params["store_ids"] = allowed_store_ids
     if channel_ids_list:
         where_raw.append("s.channel_id = ANY(:channel_ids)")
 
@@ -234,44 +258,28 @@ class ProductTopRow(BaseModel):
 
 @router.get("/product-top", response_model=List[ProductTopRow])
 def product_top(
-    start: Optional[str] = Query(None, description="ISO8601 in├¡cio (default: agora-30d)"),
+    start: Optional[str] = Query(None, description="ISO8601 início (default: agora-30d)"),
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
-    store_id: Optional[int] = Query(None, description="Se MV tiver store_id, filtra por loja"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja"),
     limit: int = Query(50, ge=1, le=500),
-    order_by: str = Query("revenue", pattern="^(revenue|qty|orders)$", description="Campo de ordena├º├úo"),
+    order_by: str = Query("revenue", pattern="^(revenue|qty|orders)$", description="Campo de ordenação"),
     direction: str = Query("DESC", pattern="^(ASC|DESC)$"),
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
+    """Ranking de produtos usando MV ou fallback. Filtra pelas lojas do usuário."""
     if not start or not end:
         start, end = _default_period(days=30)
     _validate_range(start, end)
 
-    where = ["bucket_day >= CAST(:start AS date)", "bucket_day < CAST(:end AS date)"]
     params: Dict[str, Any] = {"start": start, "end": end, "limit": limit}
+    
+    # FILTRO POR LOJAS DO USUÁRIO (OBRIGATÓRIO)
+    allowed_store_ids = user.stores or []
     if store_id is not None:
-        where.append("store_id = :store_id")
-        params["store_id"] = store_id
-
-    sql = f"""
-        SELECT
-            product_id,
-            MAX(product_name) AS product_name,
-            SUM(qty)::float   AS qty,
-            SUM(revenue)::float AS revenue,
-            SUM(orders)::int  AS orders
-        FROM mv_product_day
-        WHERE {" AND ".join(where)}
-        GROUP BY product_id
-        ORDER BY {order_by} {direction}
-        LIMIT :limit
-    """
+        if store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Acesso negado à loja especificada")
     
-    try:
-        return fetch_all(sql, params, timeout_ms=1500)
-    except ProgrammingError as e:
-        if "UndefinedTable" not in str(e):
-            raise
-    
-    # Fallback: agrega direto de product_sales + sales
+    # MV não tem store_id, então sempre usa fallback quando precisa filtrar por loja
     where_raw = [
         "s.sale_status_desc = 'COMPLETED'",
         "DATE(s.created_at) >= CAST(:start AS date)",
@@ -279,6 +287,28 @@ def product_top(
     ]
     if store_id is not None:
         where_raw.append("s.store_id = :store_id")
+        params["store_id"] = store_id
+    elif allowed_store_ids:
+        where_raw.append("s.store_id = ANY(:store_ids)")
+        params["store_ids"] = allowed_store_ids
+    
+    sql_fallback = f"""
+        SELECT
+            ps.product_id,
+            MAX(p.name) AS product_name,
+            SUM(ps.quantity)::float AS qty,
+            SUM(s.total_amount)::float AS revenue,
+            COUNT(DISTINCT s.id)::int AS orders
+        FROM product_sales ps
+        JOIN sales s ON s.id = ps.sale_id
+        JOIN products p ON p.id = ps.product_id
+        WHERE {" AND ".join(where_raw)}
+        GROUP BY ps.product_id
+        ORDER BY {order_by} {direction}
+        LIMIT :limit
+    """
+    
+    return fetch_all(sql_fallback, params, timeout_ms=3000)
     
     sql_fallback = f"""
         SELECT
@@ -315,53 +345,43 @@ class DeliveryP90Row(BaseModel):
 
 @router.get("/delivery-p90", response_model=List[DeliveryP90Row])
 def delivery_p90(
-    start: Optional[str] = Query(None, description="ISO8601 in├¡cio (default: agora-30d)"),
+    start: Optional[str] = Query(None, description="ISO8601 início (default: agora-30d)"),
     end: Optional[str] = Query(None, description="ISO8601 fim (default: agora)"),
     city: Optional[str] = Query(None, description="Filtrar por cidade"),
-    min_deliveries: int = Query(20, ge=1, le=1000, description="M├¡nimo de entregas p/ exibir linha"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja"),
+    min_deliveries: int = Query(20, ge=1, le=1000, description="Mínimo de entregas p/ exibir linha"),
     limit: int = Query(200, ge=1, le=5000),
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
+    """Estatísticas de entrega P90. Filtra pelas lojas do usuário."""
     if not start or not end:
         start, end = _default_period(days=30)
     _validate_range(start, end)
 
-    where = ["bucket_day >= CAST(:start AS date)", "bucket_day < CAST(:end AS date)"]
     params: Dict[str, Any] = {"start": start, "end": end, "limit": limit, "min_deliveries": min_deliveries}
-    if city:
-        where.append("city = :city")
-        params["city"] = city
-
-    sql = f"""
-        SELECT
-          MAX(bucket_day) AS bucket_day,
-          city,
-          neighborhood,
-          SUM(deliveries)::int                      AS deliveries,
-          AVG(avg_delivery_minutes)::float          AS avg_delivery_minutes,
-          PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY p90_delivery_minutes)::float AS p90_delivery_minutes
-        FROM mv_delivery_p90
-        WHERE {" AND ".join(where)}
-        GROUP BY city, neighborhood
-        HAVING SUM(deliveries) >= :min_deliveries
-        ORDER BY p90_delivery_minutes DESC
-        LIMIT :limit
-    """
     
-    try:
-        return fetch_all(sql, params, timeout_ms=2000)
-    except ProgrammingError as e:
-        if "UndefinedTable" not in str(e):
-            raise
+    # FILTRO POR LOJAS DO USUÁRIO (OBRIGATÓRIO)
+    allowed_store_ids = user.stores or []
+    if store_id is not None:
+        if store_id not in allowed_store_ids:
+            raise HTTPException(status_code=403, detail="Acesso negado à loja especificada")
     
-    # Fallback: agrega direto de sales + delivery_addresses
+    # MV não tem store_id, então sempre usa fallback quando precisa filtrar por loja
     where_raw = [
         "s.sale_status_desc = 'COMPLETED'",
         "s.delivery_seconds IS NOT NULL",
         "DATE(s.created_at) >= CAST(:start AS date)",
         "DATE(s.created_at) < CAST(:end AS date)",
     ]
+    if store_id is not None:
+        where_raw.append("s.store_id = :store_id")
+        params["store_id"] = store_id
+    elif allowed_store_ids:
+        where_raw.append("s.store_id = ANY(:store_ids)")
+        params["store_ids"] = allowed_store_ids
     if city:
         where_raw.append("da.city = :city")
+        params["city"] = city
     
     sql_fallback = f"""
         SELECT
@@ -407,6 +427,43 @@ def list_channels():
         ORDER BY name ASC
     """
     return fetch_all(sql, timeout_ms=1000)
+
+
+# -----------------------------------------------------------------------------
+# Stores metadata
+# -----------------------------------------------------------------------------
+
+
+class StoreRow(BaseModel):
+    id: int
+    name: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    is_active: bool
+
+
+@router.get("/stores", response_model=List[StoreRow])
+def list_stores(
+    user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+):
+    """Lista as lojas às quais o usuário tem acesso."""
+    allowed_store_ids = user.stores or []
+    
+    if not allowed_store_ids:
+        return []
+    
+    sql = """
+        SELECT
+          id,
+          name,
+          city,
+          state,
+          is_active
+        FROM stores
+        WHERE id = ANY(:store_ids)
+        ORDER BY id ASC
+    """
+    return fetch_all(sql, {"store_ids": allowed_store_ids}, timeout_ms=1000)
 
 
 # -----------------------------------------------------------------------------

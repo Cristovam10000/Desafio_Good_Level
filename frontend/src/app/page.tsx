@@ -6,7 +6,7 @@ import { format, parseISO, addDays, differenceInCalendarDays, subDays, formatISO
 import { ptBR } from "date-fns/locale/pt-BR";
 import FilterPanel, { PeriodOption, ChannelFilterOption } from "@/features/filters/components/FilterPanel";
 import { fetchInsights, fetchMetrics } from "@/shared/api/analytics";
-import { fetchChannels, fetchSalesHour, fetchDataRange } from "@/shared/api/specials";
+import { fetchChannels, fetchSalesHour, fetchDataRange, fetchStores } from "@/shared/api/specials";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
 import { IsoRange, expandToDateTime } from "@/shared/lib/date";
@@ -184,8 +184,10 @@ export default function DashboardPage() {
       });
     },
     enabled: isAuthenticated && isReady,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    staleTime: 0, // DESABILITADO temporariamente para debug
+    gcTime: 0, // DESABILITADO temporariamente para debug
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   const previousMetricsQuery = useQuery({
@@ -198,8 +200,10 @@ export default function DashboardPage() {
       });
     },
     enabled: isAuthenticated && isReady,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 0, // DESABILITADO temporariamente para debug
+    gcTime: 0, // DESABILITADO temporariamente para debug
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   // Query LENTA para insights de IA (opcional)
@@ -233,6 +237,13 @@ export default function DashboardPage() {
   const channelsQuery = useQuery({
     queryKey: ["specials", "channels"],
     queryFn: fetchChannels,
+    staleTime: Infinity,
+    enabled: isAuthenticated && isReady,
+  });
+
+  const storesQuery = useQuery({
+    queryKey: ["specials", "stores"],
+    queryFn: fetchStores,
     staleTime: Infinity,
     enabled: isAuthenticated && isReady,
   });
@@ -306,6 +317,10 @@ export default function DashboardPage() {
   const insightsData = insightsQuery.data;
 
   const metrics = useMemo(() => {
+    // DEBUG: Ver o que está vindo do backend
+    console.log('[Dashboard] metricsQuery.data:', metricsQuery.data);
+    console.log('[Dashboard] metricsQuery.data?.totals:', metricsQuery.data?.totals);
+    
     // Usar os TOTAIS calculados no backend, não somar o preview!
     const currentRevenue = metricsQuery.data?.totals?.revenue ?? 0;
     const previousRevenue = previousMetricsQuery.data?.totals?.revenue ?? 0;
@@ -313,6 +328,12 @@ export default function DashboardPage() {
     const previousOrders = previousMetricsQuery.data?.totals?.orders ?? 0;
     const currentAvgTicket = metricsQuery.data?.totals?.avg_ticket ?? 0;
     const previousAvgTicket = previousMetricsQuery.data?.totals?.avg_ticket ?? 0;
+
+    console.log('[Dashboard] Calculando métricas:', {
+      currentRevenue,
+      currentOrders,
+      currentAvgTicket,
+    });
 
     // Para o gráfico, usar os dados diários do preview
     const currentSales = (metricsQuery.data?.preview.sales_daily ?? [])
@@ -349,14 +370,53 @@ export default function DashboardPage() {
     };
   }, [metricsQuery.data, previousMetricsQuery.data, insightsData]);
 
-  const chartData = useMemo(() => {
-    const previous = metrics.chartPrevious ?? [];
-    return (metrics.chartCurrent ?? []).map((point, index) => ({
-      name: format(parseISO(point.bucket_day), "dd/MM", { locale: ptBR }),
-      current: point.revenue ?? 0,
-      previous: previous[index]?.revenue ?? null,
+  const chartDataByStore = useMemo(() => {
+    if (!salesHourQuery.data || !storesQuery.data || storesQuery.data.length === 0) {
+      return [];
+    }
+
+    // Agrupar por dia e store_id
+    const byDayAndStore = new Map<string, Map<number, number>>();
+    
+    salesHourQuery.data.forEach((row) => {
+      if (!row.bucket_hour || row.store_id == null) return;
+      
+      const day = format(parseISO(row.bucket_hour), "yyyy-MM-dd");
+      if (!byDayAndStore.has(day)) {
+        byDayAndStore.set(day, new Map());
+      }
+      
+      const storeMap = byDayAndStore.get(day)!;
+      const currentRevenue = storeMap.get(row.store_id) ?? 0;
+      storeMap.set(row.store_id, currentRevenue + (row.revenue ?? 0));
+    });
+
+    // Converter para array de objetos
+    const result: Array<{ name: string; [key: string]: number | string }> = [];
+    const sortedDays = Array.from(byDayAndStore.keys()).sort();
+    
+    sortedDays.forEach((day) => {
+      const point: { name: string; [key: string]: number | string } = {
+        name: format(parseISO(day), "dd/MM", { locale: ptBR }),
+      };
+      
+      const storeMap = byDayAndStore.get(day)!;
+      storesQuery.data.forEach((store) => {
+        point[`store_${store.id}`] = storeMap.get(store.id) ?? 0;
+      });
+      
+      result.push(point);
+    });
+
+    return result;
+  }, [salesHourQuery.data, storesQuery.data]);
+
+  const storeNames = useMemo(() => {
+    return (storesQuery.data ?? []).map((store) => ({
+      id: store.id,
+      name: store.name,
     }));
-  }, [metrics.chartCurrent, metrics.chartPrevious]);
+  }, [storesQuery.data]);
 
   const channelData = useMemo(() => {
     const totals = new Map<string, { id: string; name: string; value: number }>();
@@ -492,7 +552,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-          <SalesChart data={chartData} title="Evolucao de vendas" showComparison />
+          <SalesChart 
+            dataByStore={chartDataByStore} 
+            storeNames={storeNames}
+            title="Evolução de vendas por loja" 
+          />
           <ChannelChart data={channelData} title="Vendas por canal" />
         </div>
       </main>

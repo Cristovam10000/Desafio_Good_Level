@@ -194,11 +194,42 @@ async def analytics_metrics(
             top_products=5,
             top_locations=5,
         )
+        
+        # Se não houver dados, retornar estrutura vazia mas válida
+        if dataset.sales_daily.empty:
+            logging.warning(f"[metrics] Nenhum dado encontrado para o período {start} a {end}")
+            response_payload: Dict[str, Any] = {
+                "ok": True,
+                "period": {"start": start, "end": end},
+                "preview": {"sales_daily": [], "top_products": [], "delivery_stats": []},
+                "totals": {
+                    "revenue": 0.0,
+                    "orders": 0,
+                    "items_value": 0.0,
+                    "discounts": 0.0,
+                    "avg_ticket": 0.0,
+                },
+            }
+            return etag_json(request, response_payload, max_age=300, swr=600)
+            
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logging.error(f"Erro ao construir dataset: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Erro interno: {str(exc)}") from exc
+        # Retornar dados vazios em vez de erro 500
+        response_payload: Dict[str, Any] = {
+            "ok": True,
+            "period": {"start": start, "end": end},
+            "preview": {"sales_daily": [], "top_products": [], "delivery_stats": []},
+            "totals": {
+                "revenue": 0.0,
+                "orders": 0,
+                "items_value": 0.0,
+                "discounts": 0.0,
+                "avg_ticket": 0.0,
+            },
+        }
+        return etag_json(request, response_payload, max_age=60, swr=120)
 
     response_payload: Dict[str, Any] = {
         "ok": True,
@@ -212,9 +243,22 @@ async def analytics_metrics(
             "avg_ticket": float(dataset.sales_daily["avg_ticket"].mean()) if len(dataset.sales_daily) > 0 else 0.0,
         },
     }
+    
+    logging.info(f"[metrics] Dataset tem {len(dataset.sales_daily)} dias de dados")
+    logging.info(f"[metrics] Primeiros registros: {dataset.sales_daily.head(3).to_dict('records')}")
+    logging.info(f"[metrics] Retornando totals - revenue={response_payload['totals']['revenue']}, orders={response_payload['totals']['orders']}")
 
-    # Cache agressivo (5 minutos) pois não tem IA
-    return etag_json(request, response_payload, max_age=300, swr=600)
+
+    # Retornar JSONResponse diretamente sem ETag para forçar dados frescos
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content=response_payload,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 @router.get("/insights")
