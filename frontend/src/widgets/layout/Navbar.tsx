@@ -25,13 +25,32 @@ import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", href: "/" },
-  { id: "analytics", label: "Analytics", href: "/analytics" },
+  { id: "lojas", label: "Lojas", href: "/lojas" },
+  { id: "vendas", label: "Vendas", href: "/vendas" },
+  { id: "produtos", label: "Produtos", href: "/produtos" },
+  { id: "entregas", label: "Entregas", href: "/entregas" },
+  { id: "financeiro", label: "Financeiro", href: "/financeiro" },
+  { id: "operacoes", label: "Operações", href: "/operacoes" },
+  { id: "anomalias", label: "Anomalias", href: "/anomalias" },
 ];
 
 export function Navbar({ activeTab }: { activeTab?: string }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
-  const current = activeTab ?? (path?.startsWith("/analytics") ? "analytics" : "dashboard");
+  
+  // Detectar página ativa baseado na URL
+  let current = activeTab ?? "dashboard";
+  if (path) {
+    if (path.startsWith("/lojas")) current = "lojas";
+    else if (path.startsWith("/vendas")) current = "vendas";
+    else if (path.startsWith("/produtos")) current = "produtos";
+    else if (path.startsWith("/entregas")) current = "entregas";
+    else if (path.startsWith("/financeiro")) current = "financeiro";
+    else if (path.startsWith("/operacoes")) current = "operacoes";
+    else if (path.startsWith("/anomalias")) current = "anomalias";
+    else current = "dashboard";
+  }
+  
   const router = useRouter();
   const { auth, logout } = useAuth();
 
