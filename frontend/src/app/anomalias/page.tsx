@@ -39,6 +39,10 @@ function rangeForPreset(preset: PeriodOption, datasetEnd?: string): IsoRange {
       start.setHours(0, 0, 0, 0);
       break;
     case "full":
+      // Para período completo, retorna um range padrão que será sobrescrito pelo displayRange
+      start.setDate(end.getDate() - 90);
+      start.setHours(0, 0, 0, 0);
+      break;
     case "custom":
       break;
   }

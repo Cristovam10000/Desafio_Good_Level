@@ -277,6 +277,9 @@ async def detect_anomalies(
     Returns:
         Dictionary with detected anomalies and patterns
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[detect_anomalies] Iniciando detecção de anomalias - período: {date_range}")
     
     prompt = f"""
 Você é um especialista em detecção de anomalias e análise de padrões em dados de negócios.
@@ -336,7 +339,10 @@ Retorne um JSON no seguinte formato:
 Seja específico com datas, valores e percentuais. Use os dados reais para fundamentar suas conclusões.
 """
     
+    logger.info(f"[detect_anomalies] Tamanho do prompt: {len(prompt)} caracteres")
+    
     try:
+        logger.info("[detect_anomalies] Chamando API Gemini...")
         async with httpx.AsyncClient(timeout=90.0) as client:  # Mais tempo para anomalias
             response = await client.post(
                 f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
@@ -355,7 +361,10 @@ Seja específico com datas, valores e percentuais. Use os dados reais para funda
                 }
             )
             
+            logger.info(f"[detect_anomalies] Resposta da API: status={response.status_code}")
+            
             if response.status_code != 200:
+                logger.error(f"[detect_anomalies] Erro na API: {response.status_code} - {response.text}")
                 return {
                     "error": f"API Error: {response.status_code}",
                     "summary": "Erro ao detectar anomalias",
@@ -367,8 +376,12 @@ Seja específico com datas, valores e percentuais. Use os dados reais para funda
             
             result = response.json()
             
+            logger.info(f"[detect_anomalies] Resultado parseado - tem candidates: {'candidates' in result}")
+            
             if "candidates" in result and len(result["candidates"]) > 0:
                 content = result["candidates"][0]["content"]["parts"][0]["text"]
+                
+                logger.info(f"[detect_anomalies] Conteúdo recebido - tamanho: {len(content)} caracteres")
                 
                 # Clean markdown
                 content = content.strip()
@@ -382,8 +395,11 @@ Seja específico com datas, valores e percentuais. Use os dados reais para funda
                 
                 try:
                     anomalies = json.loads(content)
+                    logger.info(f"[detect_anomalies] JSON parseado com sucesso - anomalias conhecidas: {len(anomalies.get('known_anomalies', []))}")
                     return anomalies
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.error(f"[detect_anomalies] Erro ao parsear JSON: {e}")
+                    logger.error(f"[detect_anomalies] Conteúdo que falhou: {content[:500]}")
                     return {
                         "summary": content[:300] + "..." if len(content) > 300 else content,
                         "known_anomalies": [],
@@ -393,6 +409,7 @@ Seja específico com datas, valores e percentuais. Use os dados reais para funda
                         "raw_response": content
                     }
             
+            logger.warning("[detect_anomalies] Nenhum candidate válido na resposta")
             return {
                 "error": "No valid response from AI",
                 "summary": "Erro ao processar resposta",
@@ -403,6 +420,7 @@ Seja específico com datas, valores e percentuais. Use os dados reais para funda
             }
             
     except Exception as e:
+        logger.error(f"[detect_anomalies] Exceção: {str(e)}", exc_info=True)
         return {
             "error": str(e),
             "summary": f"Erro ao detectar anomalias: {str(e)}",

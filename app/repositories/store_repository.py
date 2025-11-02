@@ -26,7 +26,7 @@ class StoreRepository:
         """
         params: dict[str, list[int]] = {}
         query = """
-            SELECT id, name, city, state
+            SELECT id, name, city, state, is_active
             FROM stores
         """
         if store_ids:
