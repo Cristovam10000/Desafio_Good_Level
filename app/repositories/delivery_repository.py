@@ -160,3 +160,130 @@ class DeliveryRepository:
             )
             for row in result
         ]
+    
+    @staticmethod
+    def get_regions(
+        filters: DataFilters,
+        city: Optional[str] = None,
+        limit: int = 50
+    ) -> list[dict]:
+        """
+        Obtém desempenho de entrega por região (cidade + bairro).
+        """
+        base_query = """
+            SELECT
+                da.city,
+                da.neighborhood,
+                COUNT(*)::int AS deliveries,
+                AVG(s.delivery_seconds / 60.0)::float AS avg_minutes,
+                PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY s.delivery_seconds / 60.0)::float AS p90_minutes
+            FROM sales s
+            JOIN delivery_addresses da ON da.sale_id = s.id
+        """
+        
+        query, params = filters.apply_to_query(base_query)
+        query += " AND s.delivery_seconds IS NOT NULL"
+        
+        if city:
+            query += " AND da.city = :city"
+            params["city"] = city
+        
+        query += """
+            GROUP BY da.city, da.neighborhood
+            ORDER BY deliveries DESC
+            LIMIT :limit
+        """
+        params["limit"] = limit
+        
+        return fetch_all(query, params, timeout_ms=3000)
+    
+    @staticmethod
+    def get_percentiles(
+        filters: DataFilters,
+        sla_minutes: int = 45
+    ) -> dict:
+        """
+        Obtém percentis de tempo de entrega.
+        """
+        base_query = """
+            SELECT
+                AVG(s.delivery_seconds / 60.0)::float AS avg_minutes,
+                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY s.delivery_seconds / 60.0)::float AS p50_minutes,
+                PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY s.delivery_seconds / 60.0)::float AS p90_minutes,
+                PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY s.delivery_seconds / 60.0)::float AS p95_minutes,
+                (
+                    SUM(CASE WHEN s.delivery_seconds / 60.0 <= :sla_minutes THEN 1 ELSE 0 END)::float
+                    / NULLIF(COUNT(*), 0) * 100
+                )::float AS within_sla_pct
+            FROM sales s
+        """
+        
+        query, params = filters.apply_to_query(base_query)
+        query += " AND s.delivery_seconds IS NOT NULL"
+        params["sla_minutes"] = sla_minutes
+        
+        result = fetch_all(query, params, timeout_ms=2000)
+        return result[0] if result else {
+            "avg_minutes": 0.0,
+            "p50_minutes": 0.0,
+            "p90_minutes": 0.0,
+            "p95_minutes": 0.0,
+            "within_sla_pct": 0.0,
+        }
+    
+    @staticmethod
+    def get_stats(
+        filters: DataFilters,
+    ) -> dict:
+        """
+        Obtém estatísticas gerais de entrega.
+        """
+        base_query = """
+            SELECT
+                COUNT(*)::int AS total_deliveries,
+                MIN(s.delivery_seconds / 60.0)::float AS fastest_minutes,
+                MAX(s.delivery_seconds / 60.0)::float AS slowest_minutes,
+                AVG(s.delivery_seconds / 60.0)::float AS avg_minutes
+            FROM sales s
+        """
+        
+        query, params = filters.apply_to_query(base_query)
+        query += " AND s.delivery_seconds IS NOT NULL"
+        
+        result = fetch_all(query, params, timeout_ms=2000)
+        return result[0] if result else {
+            "total_deliveries": 0,
+            "fastest_minutes": 0.0,
+            "slowest_minutes": 0.0,
+            "avg_minutes": 0.0,
+        }
+    
+    @staticmethod
+    def get_stores_rank(
+        filters: DataFilters,
+        limit: int = 10
+    ) -> list[dict]:
+        """
+        Obtém ranking de desempenho de entrega por loja.
+        """
+        base_query = """
+            SELECT
+                s.store_id,
+                st.name AS store_name,
+                COUNT(*)::int AS deliveries,
+                AVG(s.delivery_seconds / 60.0)::float AS avg_minutes,
+                PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY s.delivery_seconds / 60.0)::float AS p90_minutes
+            FROM sales s
+            JOIN stores st ON s.store_id = st.id
+        """
+        
+        query, params = filters.apply_to_query(base_query)
+        query += """
+            AND s.delivery_seconds IS NOT NULL
+            GROUP BY s.store_id, st.name
+            ORDER BY deliveries DESC
+            LIMIT :limit
+        """
+        params["limit"] = limit
+        
+        return fetch_all(query, params, timeout_ms=3000)

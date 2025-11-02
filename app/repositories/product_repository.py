@@ -155,3 +155,66 @@ class ProductRepository:
         
         return fetch_all(query, params, timeout_ms=5000)
 
+    @staticmethod
+    def get_top_addons(
+        filters: DataFilters,
+        limit: int = 10
+    ) -> list[dict]:
+        """
+        Obtém itens adicionais (modificadores) mais populares.
+        """
+        base_query = """
+            SELECT
+                ips.item_id,
+                i.name AS item_name,
+                SUM(ips.quantity)::float AS qty,
+                SUM(ips.amount)::float AS revenue,
+                COUNT(DISTINCT ips.product_sale_id)::int AS uses
+            FROM sales s
+            JOIN product_sales ps ON ps.sale_id = s.id
+            JOIN item_product_sales ips ON ips.product_sale_id = ps.id
+            JOIN items i ON i.id = ips.item_id
+        """
+        
+        query, params = filters.apply_to_query(base_query)
+        query += """
+            GROUP BY ips.item_id, i.name
+            ORDER BY revenue DESC
+            LIMIT :limit
+        """
+        params["limit"] = limit
+        
+        return fetch_all(query, params, timeout_ms=2000)
+
+    @staticmethod
+    def get_combinations(
+        filters: DataFilters,
+        limit: int = 20
+    ) -> list[dict]:
+        """
+        Obtém combinações de produtos frequentemente compradas juntos.
+        """
+        base_query = """
+            SELECT
+                ps1.product_id AS product1_id,
+                p1.name AS product1_name,
+                ps2.product_id AS product2_id,
+                p2.name AS product2_name,
+                COUNT(*)::int AS times_together
+            FROM sales s
+            JOIN product_sales ps1 ON ps1.sale_id = s.id
+            JOIN product_sales ps2 ON ps2.sale_id = s.id AND ps1.product_id < ps2.product_id
+            JOIN products p1 ON p1.id = ps1.product_id
+            JOIN products p2 ON p2.id = ps2.product_id
+        """
+        
+        query, params = filters.apply_to_query(base_query)
+        query += """
+            GROUP BY ps1.product_id, p1.name, ps2.product_id, p2.name
+            ORDER BY times_together DESC
+            LIMIT :limit
+        """
+        params["limit"] = limit
+        
+        return fetch_all(query, params, timeout_ms=3000)
+
