@@ -1924,6 +1924,10 @@ async def detect_business_anomalies(
     - Other unexpected patterns and anomalies
     - Business insights and recommendations
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[anomalies] Iniciando detecção - start={start}, end={end}, user={user.sub}")
+    
     if not start or not end:
         # For anomaly detection, use a longer default period (90 days)
         start, end = _default_period(days=90)
@@ -2011,10 +2015,14 @@ async def detect_business_anomalies(
     """
     all_data["cancellation_patterns"] = fetch_all(sql_cancellations, params, timeout_ms=5000)
     
+    logger.info(f"[anomalies] Dados coletados - daily_sales: {len(all_data.get('daily_sales', []))}, weekly_sales: {len(all_data.get('weekly_sales', []))}")
+    
     # Detect anomalies using AI
+    logger.info("[anomalies] Chamando detect_anomalies...")
     anomalies = await detect_anomalies(
         all_data,
         {"start": start, "end": end}
     )
     
+    logger.info(f"[anomalies] Anomalias detectadas - summary: {anomalies.get('summary', 'N/A')[:100]}")
     return anomalies

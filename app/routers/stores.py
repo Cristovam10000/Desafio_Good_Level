@@ -50,6 +50,7 @@ class StoreRow(BaseModel):
     name: str
     city: str
     state: str
+    is_active: bool
 
 
 class StorePerformanceRow(BaseModel):
@@ -96,6 +97,7 @@ def get_stores(
             name=s["name"],
             city=s.get("city") or "",
             state=s.get("state") or "",
+            is_active=bool(s.get("is_active", True)),
         )
         for s in stores
     ]
