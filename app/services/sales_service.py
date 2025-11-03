@@ -1,4 +1,4 @@
-"""Sales business logic service."""
+﻿"""Sales business logic service."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.domain.models import (
     HourlySalesMetrics,
     DiscountReasonMetrics,
 )
-from app.repositories.sales_repository import SalesRepository
+from app.repositories.protocols import SalesRepositoryProtocol
 
 
 class SalesService:

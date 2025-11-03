@@ -1,4 +1,4 @@
-"""Sales domain endpoints."""
+﻿"""Sales domain endpoints."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.security import AccessClaims, require_roles
+from app.services.dependencies import get_sales_service
 from app.services.sales_service import SalesService
 
 
@@ -111,6 +112,7 @@ def get_sales_summary(
     store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: SalesService = Depends(get_sales_service),
 ):
     """Resumo de vendas para o período."""
     # Parse dates
@@ -129,7 +131,6 @@ def get_sales_summary(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = SalesService()
     summary = service.get_summary(start_dt, end_dt, store_ids, channel_ids)
 
     if summary is None:
@@ -149,6 +150,7 @@ def get_sales_by_channel(
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
     store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: SalesService = Depends(get_sales_service),
 ):
     """Vendas por canal."""
     # Parse dates
@@ -166,7 +168,6 @@ def get_sales_by_channel(
     store_ids = [store_id] if store_id else allowed_store_ids or None
 
     # Get data from service
-    service = SalesService()
     channel_data = service.get_by_channel(start_dt, end_dt, store_ids, None)
 
     total_revenue = sum(float(data.total_revenue) for data in channel_data)
@@ -190,6 +191,7 @@ def get_sales_by_day(
     store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: SalesService = Depends(get_sales_service),
 ):
     """Vendas por dia."""
     # Parse dates
@@ -208,7 +210,6 @@ def get_sales_by_day(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = SalesService()
     daily_data = service.get_by_day(start_dt, end_dt, store_ids, channel_ids)
 
     return [
@@ -229,6 +230,7 @@ def get_sales_by_hour(
     store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: SalesService = Depends(get_sales_service),
 ):
     """Vendas por hora do dia."""
     # Parse dates
@@ -247,7 +249,6 @@ def get_sales_by_hour(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = SalesService()
     hourly_data = service.get_by_hour(start_dt, end_dt, store_ids, channel_ids)
 
     return [
@@ -268,6 +269,7 @@ def get_discount_reasons(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de motivos no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: SalesService = Depends(get_sales_service),
 ):
     """Top motivos de desconto."""
     # Parse dates
@@ -286,7 +288,6 @@ def get_discount_reasons(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = SalesService()
     reasons = service.get_discount_reasons(start_dt, end_dt, store_ids, channel_ids, limit)
 
     result: list[DiscountReasonRow] = []
@@ -309,6 +310,7 @@ def get_sales_by_weekday(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: SalesService = Depends(get_sales_service),
 ):
     """Vendas por dia da semana."""
     # Parse dates
@@ -322,7 +324,6 @@ def get_sales_by_weekday(
     allowed_store_ids = user.stores or []
 
     # Get data from service
-    service = SalesService()
     weekday_data = service.get_by_weekday(start_dt, end_dt, allowed_store_ids or None)
 
     return [SalesByWeekdayRow(**row) for row in weekday_data]

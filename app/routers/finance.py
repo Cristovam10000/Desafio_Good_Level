@@ -72,6 +72,8 @@ class NetVsGrossResponse(BaseModel):
 def get_payments_mix(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
+    channel_id: Optional[int] = Query(None, description="ID do canal para filtrar"),
+    store_id: Optional[int] = Query(None, description="ID da loja para filtrar"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
     """Mix de pagamentos por canal."""
@@ -84,10 +86,22 @@ def get_payments_mix(
 
     # Apply filters
     allowed_store_ids = user.stores or []
+    
+    # Combine user permissions with request filters
+    store_ids_filter = None
+    if store_id is not None:
+        # User requested specific store - apply if allowed
+        if not allowed_store_ids or store_id in allowed_store_ids:
+            store_ids_filter = [store_id]
+    elif allowed_store_ids:
+        # No specific store requested, but user has restrictions
+        store_ids_filter = allowed_store_ids
+    
+    channel_ids_filter = [channel_id] if channel_id is not None else None
 
     # Get data from service
     service = FinanceService()
-    data = service.get_payments_mix(start_dt, end_dt, allowed_store_ids or None)
+    data = service.get_payments_mix(start_dt, end_dt, store_ids_filter, channel_ids_filter)
 
     return [PaymentMixRow(**row) for row in data]
 
@@ -96,6 +110,8 @@ def get_payments_mix(
 def get_net_vs_gross(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
+    channel_id: Optional[int] = Query(None, description="ID do canal para filtrar"),
+    store_id: Optional[int] = Query(None, description="ID da loja para filtrar"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
 ):
     """Receita líquida vs bruta."""
@@ -108,9 +124,21 @@ def get_net_vs_gross(
 
     # Apply filters
     allowed_store_ids = user.stores or []
+    
+    # Combine user permissions with request filters
+    store_ids_filter = None
+    if store_id is not None:
+        # User requested specific store - apply if allowed
+        if not allowed_store_ids or store_id in allowed_store_ids:
+            store_ids_filter = [store_id]
+    elif allowed_store_ids:
+        # No specific store requested, but user has restrictions
+        store_ids_filter = allowed_store_ids
+    
+    channel_ids_filter = [channel_id] if channel_id is not None else None
 
     # Get data from service
     service = FinanceService()
-    data = service.get_net_vs_gross(start_dt, end_dt, allowed_store_ids or None)
+    data = service.get_net_vs_gross(start_dt, end_dt, store_ids_filter, channel_ids_filter)
 
     return NetVsGrossResponse(**data)

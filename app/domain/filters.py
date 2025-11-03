@@ -19,7 +19,7 @@ class DataFilters:
     end_date: datetime
     store_ids: Optional[Sequence[int]] = None
     channel_ids: Optional[Sequence[int]] = None
-    sale_status: str = "COMPLETED"
+    sale_status: Optional[str] = None  # Removido filtro padrão "COMPLETED"
     
     def to_sql_conditions(self) -> tuple[list[str], dict]:
         """
@@ -29,16 +29,19 @@ class DataFilters:
             Tupla contendo lista de condições WHERE e dicionário de parâmetros
         """
         conditions = [
-            "s.sale_status_desc = :sale_status",
             "s.created_at >= :start_date",
             "s.created_at < :end_date",
         ]
         
         params = {
-            "sale_status": self.sale_status,
             "start_date": self.start_date.isoformat(),
             "end_date": self.end_date.isoformat(),
         }
+        
+        # Adiciona filtro de status apenas se especificado
+        if self.sale_status:
+            conditions.append("s.sale_status_desc = :sale_status")
+            params["sale_status"] = self.sale_status
         
         if self.store_ids:
             conditions.append("s.store_id = ANY(:store_ids)")

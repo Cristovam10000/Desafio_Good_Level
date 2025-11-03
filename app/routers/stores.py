@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.security import AccessClaims, require_roles
+from app.services.dependencies import get_store_service
 from app.services.store_service import StoreService
 
 
@@ -84,11 +85,11 @@ class StoreTimeseriesRow(BaseModel):
 @router.get("", response_model=list[StoreRow])
 def get_stores(
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: StoreService = Depends(get_store_service),
 ):
     """Lista todas as lojas acessÃƒÂ­veis ao usuÃƒÂ¡rio."""
     allowed_store_ids = user.stores or []
     
-    service = StoreService()
     stores = service.get_all(allowed_store_ids or None)
 
     return [
@@ -110,6 +111,7 @@ def get_stores_performance(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal especÃƒÂ­fico"),
     include_prep_time: bool = Query(False, description="Incluir tempo de preparo mÃƒÂ©dio"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: StoreService = Depends(get_store_service),
 ):
     """Performance das lojas no perÃƒÂ­odo."""
     # Parse dates
@@ -124,7 +126,6 @@ def get_stores_performance(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = StoreService()
     store_lookup = {row["id"]: row for row in service.get_all(allowed_store_ids or None)}
     metrics = service.get_metrics(start_dt, end_dt, allowed_store_ids, channel_ids, include_prep_time)
 
@@ -153,6 +154,7 @@ def get_store_timeseries(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: StoreService = Depends(get_store_service),
 ):
     """SÃƒÂ©rie temporal de uma loja especÃƒÂ­fica."""
     # Parse dates
@@ -168,7 +170,6 @@ def get_store_timeseries(
         raise HTTPException(status_code=403, detail="Acesso negado ÃƒÂ  loja")
 
     # Get data from service
-    service = StoreService()
     data = service.get_timeseries(store_id, start_dt, end_dt)
 
     return [

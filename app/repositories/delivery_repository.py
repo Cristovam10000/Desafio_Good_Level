@@ -264,7 +264,8 @@ class DeliveryRepository:
         limit: int = 10
     ) -> list[dict]:
         """
-        Obtém ranking de desempenho de entrega por loja.
+        Obtém ranking de lojas com MAIOR tempo de entrega (mais lentas).
+        Ordena por tempo médio de entrega em ordem decrescente.
         """
         base_query = """
             SELECT
@@ -281,7 +282,7 @@ class DeliveryRepository:
         query += """
             AND s.delivery_seconds IS NOT NULL
             GROUP BY s.store_id, st.name
-            ORDER BY deliveries DESC
+            ORDER BY avg_minutes DESC
             LIMIT :limit
         """
         params["limit"] = limit

@@ -16,6 +16,7 @@ class FinanceService:
         start: datetime,
         end: datetime,
         store_ids: Optional[list[int]] = None,
+        channel_ids: Optional[list[int]] = None,
     ) -> list[dict]:
         """Get payment types mix by channel."""
         where = [
@@ -28,6 +29,10 @@ class FinanceService:
         if store_ids:
             where.append("s.store_id = ANY(:store_ids)")
             params["store_ids"] = store_ids
+        
+        if channel_ids:
+            where.append("s.channel_id = ANY(:channel_ids)")
+            params["channel_ids"] = channel_ids
         
         sql = f"""
             WITH totals AS (
@@ -59,6 +64,7 @@ class FinanceService:
         start: datetime,
         end: datetime,
         store_ids: Optional[list[int]] = None,
+        channel_ids: Optional[list[int]] = None,
     ) -> dict:
         """Get net vs gross revenue breakdown."""
         where = [
@@ -71,6 +77,10 @@ class FinanceService:
         if store_ids:
             where.append("store_id = ANY(:store_ids)")
             params["store_ids"] = store_ids
+        
+        if channel_ids:
+            where.append("channel_id = ANY(:channel_ids)")
+            params["channel_ids"] = channel_ids
         
         sql = f"""
             SELECT
@@ -93,3 +103,4 @@ class FinanceService:
             "net_revenue": 0.0,
             "discount_pct": 0.0,
         }
+

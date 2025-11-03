@@ -1,4 +1,4 @@
-"""Store business logic service."""
+﻿"""Store business logic service."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.domain.filters import DataFilters
 from app.domain.models import StoreMetrics
-from app.repositories.store_repository import StoreRepository
+from app.repositories.protocols import StoreRepositoryProtocol
 
 
 class StoreService:

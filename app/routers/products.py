@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.security import AccessClaims, require_roles
+from app.services.dependencies import get_product_service
 from app.services.product_service import ProductService
 
 
@@ -108,6 +109,7 @@ def get_top_sellers(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de produtos no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: ProductService = Depends(get_product_service),
 ):
     """Top produtos mais vendidos."""
     # Parse dates
@@ -126,7 +128,6 @@ def get_top_sellers(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = ProductService()
     products = service.get_top_sellers(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [
@@ -149,6 +150,7 @@ def get_low_sellers(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de produtos no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: ProductService = Depends(get_product_service),
 ):
     """Produtos com menor volume de vendas."""
     # Parse dates
@@ -167,7 +169,6 @@ def get_low_sellers(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = ProductService()
     products = service.get_low_sellers(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [
@@ -190,6 +191,7 @@ def get_most_customized(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de produtos no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: ProductService = Depends(get_product_service),
 ):
     """Produtos com mais customizações."""
     # Parse dates
@@ -208,7 +210,6 @@ def get_most_customized(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = ProductService()
     products = service.get_most_customized(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [
@@ -231,6 +232,7 @@ def get_top_addons(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de itens no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: ProductService = Depends(get_product_service),
 ):
     """Top itens adicionais (modificadores)."""
     # Parse dates
@@ -249,7 +251,6 @@ def get_top_addons(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = ProductService()
     addons = service.get_top_addons(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [
@@ -271,6 +272,7 @@ def get_combinations(
     store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
     limit: int = Query(20, ge=1, le=100, description="Quantidade de combinações no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: ProductService = Depends(get_product_service),
 ):
     """Produtos frequentemente comprados juntos."""
     # Parse dates
@@ -288,7 +290,6 @@ def get_combinations(
     store_ids = [store_id] if store_id else allowed_store_ids or None
 
     # Get data from service
-    service = ProductService()
     combinations = service.get_combinations(start_dt, end_dt, store_ids, limit)
 
     return [ProductCombinationRow(**combo) for combo in combinations]

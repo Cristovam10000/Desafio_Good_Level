@@ -20,7 +20,7 @@ class UtilsService:
                 MAX(created_at)::text AS max_date
             FROM sales
         """
-        result = fetch_all(sql, timeout_ms=2000)
+        result = fetch_all(sql, timeout_ms=5000)
         if result:
             return {
                 "min_date": result[0]["min_date"],

@@ -42,6 +42,10 @@ def _default_period(days: int = 30) -> tuple[datetime, datetime]:
 
 def _validate_user_store_access(store_id: Optional[int], user_stores: list[int]) -> None:
     """Validate if user has access to the requested store."""
+    # Se user_stores está vazio, usuário tem acesso a todas as lojas (admin)
+    if not user_stores:
+        return
+    # Se store_id foi especificado, verificar se usuário tem acesso
     if store_id is not None and store_id not in user_stores:
         raise HTTPException(status_code=403, detail="Acesso negado à loja especificada")
 
@@ -283,6 +287,8 @@ def get_delivery_regions(
 def get_delivery_percentiles(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
+    channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     sla_minutes: int = Query(45, description="SLA em minutos"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
     service: DeliveryService = Depends(get_delivery_service),
@@ -295,11 +301,16 @@ def get_delivery_percentiles(
     else:
         start_dt, end_dt = _default_period(days=30)
 
-    # Apply filters
+    # Validate store access
     allowed_store_ids = user.stores or []
+    _validate_user_store_access(store_id, allowed_store_ids)
+    
+    # Apply filters
+    store_ids = [store_id] if store_id else allowed_store_ids or None
+    channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    data = service.get_percentiles(start_dt, end_dt, allowed_store_ids or None, sla_minutes)
+    data = service.get_percentiles(start_dt, end_dt, store_ids, channel_ids, sla_minutes)
 
     return DeliveryPercentilesResponse(**data)
 
@@ -308,6 +319,8 @@ def get_delivery_percentiles(
 def get_delivery_stats(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
+    channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
     service: DeliveryService = Depends(get_delivery_service),
 ):
@@ -319,11 +332,16 @@ def get_delivery_stats(
     else:
         start_dt, end_dt = _default_period(days=30)
 
-    # Apply filters
+    # Validate store access
     allowed_store_ids = user.stores or []
+    _validate_user_store_access(store_id, allowed_store_ids)
+    
+    # Apply filters
+    store_ids = [store_id] if store_id else allowed_store_ids or None
+    channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    data = service.get_stats(start_dt, end_dt, allowed_store_ids or None)
+    data = service.get_stats(start_dt, end_dt, store_ids, channel_ids)
 
     return DeliveryStatsResponse(**data)
 
@@ -332,11 +350,14 @@ def get_delivery_stats(
 def get_delivery_stores_rank(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
+    channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
+    order_by: str = Query("slowest", description="Ordenação: 'slowest' (mais lentas) ou 'fastest' (mais rápidas)"),
     limit: int = Query(10, ge=1, le=50, description="Quantidade de lojas no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
     service: DeliveryService = Depends(get_delivery_service),
 ):
-    """Ranking de lojas por volume de entregas."""
+    """Ranking de lojas por tempo de entrega."""
     # Parse dates
     if start and end:
         start_dt = _parse_iso8601(start)
@@ -344,10 +365,15 @@ def get_delivery_stores_rank(
     else:
         start_dt, end_dt = _default_period(days=30)
 
-    # Apply filters
+    # Validate store access
     allowed_store_ids = user.stores or []
+    _validate_user_store_access(store_id, allowed_store_ids)
+    
+    # Apply filters
+    store_ids = [store_id] if store_id else allowed_store_ids or None
+    channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    stores = service.get_stores_rank(start_dt, end_dt, allowed_store_ids or None, limit)
+    stores = service.get_stores_rank(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [DeliveryStoreRankRow(**s) for s in stores]

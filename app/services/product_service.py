@@ -1,4 +1,4 @@
-"""Product business logic service."""
+﻿"""Product business logic service."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.domain.filters import DataFilters
 from app.domain.models import ProductMetrics
-from app.repositories.product_repository import ProductRepository
+from app.repositories.protocols import ProductRepositoryProtocol
 
 
 class ProductService:
