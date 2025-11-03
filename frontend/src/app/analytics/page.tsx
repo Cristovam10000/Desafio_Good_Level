@@ -117,15 +117,18 @@ export default function AnalyticsPage() {
 
   const channelData = useMemo(() => {
     const channelMap = new Map<number, string>();
-    channelsQuery.data?.forEach((channel) => channelMap.set(channel.id, channel.name));
+    channelsQuery.data?.forEach((channel) => {
+      const label = channel.store_name ? `${channel.channel_name} - ${channel.store_name}` : channel.channel_name;
+      channelMap.set(channel.channel_id, label);
+    });
 
     const totals = new Map<string, { id: string; name: string; value: number }>();
     salesHourQuery.data?.forEach((row) => {
       if (row.channel_id == null) return;
       const channelId = row.channel_id;
       const name = channelMap.get(channelId) ?? `Canal ${channelId}`;
-      const key = name.toLowerCase();
-      const current = totals.get(key) ?? { id: String(channelId), name, value: 0 };
+      const key = String(channelId);
+      const current = totals.get(key) ?? { id: key, name, value: 0 };
       totals.set(key, {
         id: current.id,
         name,

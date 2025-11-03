@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Calendar, BarChart3, Lightbulb } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useChannelSelection } from "@/shared/hooks/useChannelSelection";
 import { IsoRange } from "@/shared/lib/date";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -60,7 +61,6 @@ export default function VendasPage() {
   const { isAuthenticated, isReady } = useRequireAuth();
   const [period, setPeriod] = useState<PeriodOption>("30days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("30days"));
-  const [channelOption, setChannelOption] = useState<number | null>(null);
   const [showAllPeriod, setShowAllPeriod] = useState(false);
 
   const displayRange = useMemo<IsoRange>(() => {
@@ -86,73 +86,87 @@ export default function VendasPage() {
     queryFn: fetchChannels,
   });
 
+  const {
+    selection: channelSelection,
+    handleSelect: handleChannelSelect,
+    channelKey,
+    channelId: selectedChannelId,
+    storeId: selectedStoreId,
+  } = useChannelSelection(channelsQuery.data);
+
   // Fetch sales summary
   const summaryQuery = useQuery({
-    queryKey: ["sales", "summary", displayRange, channelOption],
+    queryKey: ["sales", "summary", displayRange, channelKey],
     queryFn: () =>
       fetchSalesSummary({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch sales by channel
   const byChannelQuery = useQuery({
-    queryKey: ["sales", "by-channel", displayRange],
+    queryKey: ["sales", "by-channel", displayRange, channelKey],
     queryFn: () =>
       fetchSalesByChannel({
         start: displayRange.start,
         end: displayRange.end,
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch sales by day
   const byDayQuery = useQuery({
-    queryKey: ["sales", "by-day", displayRange, channelOption],
+    queryKey: ["sales", "by-day", displayRange, channelKey],
     queryFn: () =>
       fetchSalesByDay({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch sales by weekday
   const byWeekdayQuery = useQuery({
-    queryKey: ["sales", "by-weekday", displayRange, channelOption],
+    queryKey: ["sales", "by-weekday", displayRange, channelKey],
     queryFn: () =>
       fetchSalesByWeekday({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch discount reasons
   const discountReasonsQuery = useQuery({
-    queryKey: ["sales", "discount-reasons", displayRange, channelOption],
+    queryKey: ["sales", "discount-reasons", displayRange, channelKey],
     queryFn: () =>
       fetchDiscountReasons({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch AI insights for Vendas section
   const insightsQuery = useQuery({
-    queryKey: ["insights", "vendas", displayRange, channelOption],
+    queryKey: ["insights", "vendas", displayRange, channelKey],
     queryFn: () =>
       fetchSectionInsights("vendas", {
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -261,20 +275,21 @@ export default function VendasPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={channelOption?.toString() || "all"}
-                onValueChange={(v) => setChannelOption(v === "all" ? null : Number(v))}
-              >
-                <SelectTrigger className="w-[180px]">
+              <Select value={channelSelection?.key ?? "all"} onValueChange={handleChannelSelect}>
+                <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder="Todos os canais" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os canais</SelectItem>
-                  {channelsQuery.data?.map((ch) => (
-                    <SelectItem key={ch.channel_id} value={ch.channel_id.toString()}>
-                      {ch.channel_name}
-                    </SelectItem>
-                  ))}
+                  {channelsQuery.data?.map((ch) => {
+                    const label = ch.store_name ? `${ch.channel_name} - ${ch.store_name}` : ch.channel_name;
+                    const key = ch.channel_store_key ?? `${ch.channel_id}:${ch.store_id}`;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

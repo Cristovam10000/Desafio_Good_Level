@@ -1,4 +1,4 @@
-"""Delivery domain endpoints."""
+﻿"""Delivery domain endpoints."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.security import AccessClaims, require_roles
+from app.services.dependencies import get_delivery_service
 from app.services.delivery_service import DeliveryService
 
 
@@ -124,6 +125,7 @@ def get_delivery_metrics(
     store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Métricas gerais de entrega."""
     # Parse dates
@@ -142,7 +144,6 @@ def get_delivery_metrics(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = DeliveryService()
     metrics = service.get_metrics(start_dt, end_dt, store_ids, channel_ids)
 
     if metrics is None:
@@ -175,6 +176,7 @@ def get_delivery_cities_rank(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de cidades no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Ranking de cidades por volume de entregas."""
     # Parse dates
@@ -193,7 +195,6 @@ def get_delivery_cities_rank(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = DeliveryService()
     cities = service.get_by_city(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [
@@ -215,6 +216,7 @@ def get_delivery_neighborhoods(
     channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     limit: int = Query(10, ge=1, le=100, description="Quantidade de bairros no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Ranking de bairros por volume de entregas."""
     # Parse dates
@@ -233,7 +235,6 @@ def get_delivery_neighborhoods(
     channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = DeliveryService()
     neighborhoods = service.get_by_neighborhood(start_dt, end_dt, store_ids, channel_ids, limit)
 
     return [
@@ -251,9 +252,12 @@ def get_delivery_neighborhoods(
 def get_delivery_regions(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
+    store_id: Optional[int] = Query(None, description="Filtrar por loja específica"),
+    channel_id: Optional[int] = Query(None, description="Filtrar por canal específico"),
     city: Optional[str] = Query(None, description="Filtrar por cidade"),
     limit: int = Query(50, ge=1, le=500, description="Quantidade de regiões no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Desempenho de entrega por região."""
     # Parse dates
@@ -265,10 +269,12 @@ def get_delivery_regions(
 
     # Apply filters
     allowed_store_ids = user.stores or []
+    _validate_user_store_access(store_id, allowed_store_ids)
+    store_ids = [store_id] if store_id else allowed_store_ids or None
+    channel_ids = [channel_id] if channel_id else None
 
     # Get data from service
-    service = DeliveryService()
-    regions = service.get_regions(start_dt, end_dt, allowed_store_ids or None, city, limit)
+    regions = service.get_regions(start_dt, end_dt, store_ids, channel_ids, city, limit)
 
     return [DeliveryRegionsRow(**r) for r in regions]
 
@@ -279,6 +285,7 @@ def get_delivery_percentiles(
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
     sla_minutes: int = Query(45, description="SLA em minutos"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Percentis de entrega."""
     # Parse dates
@@ -292,7 +299,6 @@ def get_delivery_percentiles(
     allowed_store_ids = user.stores or []
 
     # Get data from service
-    service = DeliveryService()
     data = service.get_percentiles(start_dt, end_dt, allowed_store_ids or None, sla_minutes)
 
     return DeliveryPercentilesResponse(**data)
@@ -303,6 +309,7 @@ def get_delivery_stats(
     start: Optional[str] = Query(None, description="Data/hora inicial (ISO8601)"),
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Estatísticas gerais de entregas."""
     # Parse dates
@@ -316,7 +323,6 @@ def get_delivery_stats(
     allowed_store_ids = user.stores or []
 
     # Get data from service
-    service = DeliveryService()
     data = service.get_stats(start_dt, end_dt, allowed_store_ids or None)
 
     return DeliveryStatsResponse(**data)
@@ -328,6 +334,7 @@ def get_delivery_stores_rank(
     end: Optional[str] = Query(None, description="Data/hora final (ISO8601)"),
     limit: int = Query(10, ge=1, le=50, description="Quantidade de lojas no ranking"),
     user: AccessClaims = Depends(require_roles("viewer", "analyst", "manager", "admin")),
+    service: DeliveryService = Depends(get_delivery_service),
 ):
     """Ranking de lojas por volume de entregas."""
     # Parse dates
@@ -341,7 +348,6 @@ def get_delivery_stores_rank(
     allowed_store_ids = user.stores or []
 
     # Get data from service
-    service = DeliveryService()
     stores = service.get_stores_rank(start_dt, end_dt, allowed_store_ids or None, limit)
 
     return [DeliveryStoreRankRow(**s) for s in stores]

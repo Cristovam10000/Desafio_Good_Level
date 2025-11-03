@@ -8,6 +8,7 @@ import { Input } from "@/shared/ui/input";
 import { Calendar, BarChart3, Lightbulb } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useChannelSelection } from "@/shared/hooks/useChannelSelection";
 import { IsoRange } from "@/shared/lib/date";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -58,7 +59,6 @@ export default function ProdutosPage() {
   const { isAuthenticated, isReady } = useRequireAuth();
   const [period, setPeriod] = useState<PeriodOption>("30days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("30days"));
-  const [channelOption, setChannelOption] = useState<number | null>(null);
   const [showAllPeriod, setShowAllPeriod] = useState(false);
 
   const displayRange = useMemo<IsoRange>(() => {
@@ -95,14 +95,23 @@ export default function ProdutosPage() {
     queryFn: fetchChannels,
   });
 
+  const {
+    selection: channelSelection,
+    handleSelect: handleChannelSelect,
+    channelKey,
+    channelId: selectedChannelId,
+    storeId: selectedStoreId,
+  } = useChannelSelection(channelsQuery.data);
+
   // Fetch low sellers
   const lowSellersQuery = useQuery({
-    queryKey: ["products", "low-sellers", displayRange, channelOption],
+    queryKey: ["products", "low-sellers", displayRange, channelKey],
     queryFn: () =>
       fetchProductsLowSellers({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 10,
       }),
     enabled: isAuthenticated,
@@ -110,12 +119,13 @@ export default function ProdutosPage() {
 
   // Fetch top sellers
   const topSellersQuery = useQuery({
-    queryKey: ["products", "top-sellers", displayRange, channelOption],
+    queryKey: ["products", "top-sellers", displayRange, channelKey],
     queryFn: () =>
       fetchProductsTopSellers({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 5,
       }),
     enabled: isAuthenticated,
@@ -123,12 +133,13 @@ export default function ProdutosPage() {
 
   // Fetch top addons
   const addonsQuery = useQuery({
-    queryKey: ["products", "addons", displayRange, channelOption],
+    queryKey: ["products", "addons", displayRange, channelKey],
     queryFn: () =>
       fetchProductsAddonsTop({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 10,
       }),
     enabled: isAuthenticated,
@@ -136,12 +147,13 @@ export default function ProdutosPage() {
 
   // Fetch products with most customizations
   const mostCustomizedQuery = useQuery({
-    queryKey: ["products", "most-customized", displayRange, channelOption],
+    queryKey: ["products", "most-customized", displayRange, channelKey],
     queryFn: () =>
       fetchProductsMostCustomized({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 10,
       }),
     enabled: isAuthenticated,
@@ -149,12 +161,13 @@ export default function ProdutosPage() {
 
   // Fetch product combinations
   const combinationsQuery = useQuery({
-    queryKey: ["products", "combinations", displayRange, channelOption],
+    queryKey: ["products", "combinations", displayRange, channelKey],
     queryFn: () =>
       fetchProductCombinations({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 10,
       }),
     enabled: isAuthenticated,
@@ -162,12 +175,13 @@ export default function ProdutosPage() {
 
   // Fetch insights
   const insightsQuery = useQuery({
-    queryKey: ["insights", "produtos", displayRange, channelOption],
+    queryKey: ["insights", "produtos", displayRange, channelKey],
     queryFn: () =>
       fetchSectionInsights("produtos", {
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
@@ -282,20 +296,21 @@ export default function ProdutosPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={channelOption?.toString() || "all"}
-                onValueChange={(v) => setChannelOption(v === "all" ? null : Number(v))}
-              >
-                <SelectTrigger className="w-[180px]">
+              <Select value={channelSelection?.key ?? "all"} onValueChange={handleChannelSelect}>
+                <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder="Todos os canais" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os canais</SelectItem>
-                  {channelsQuery.data?.map((ch) => (
-                    <SelectItem key={ch.channel_id} value={ch.channel_id.toString()}>
-                      {ch.channel_name}
-                    </SelectItem>
-                  ))}
+                  {channelsQuery.data?.map((ch) => {
+                    const label = ch.store_name ? `${ch.channel_name} - ${ch.store_name}` : ch.channel_name;
+                    const key = ch.channel_store_key ?? `${ch.channel_id}:${ch.store_id}`;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

@@ -15,8 +15,11 @@ const ProductTopResponseSchema = z.array(ProductRankingRowSchema);
 const DeliveryP90ResponseSchema = z.array(DeliveryPerformanceRowSchema);
 const ChannelsResponseSchema = z.array(
   z.object({
-    id: z.number(),
-    name: z.string(),
+    channel_id: z.number(),
+    channel_name: z.string(),
+    store_id: z.number(),
+    store_name: z.string(),
+    channel_store_key: z.string(),
     description: z.string().nullable().optional(),
     type: z.string().nullable().optional(),
   })

@@ -342,6 +342,10 @@ export async function fetchCancellations(params?: Record<string, unknown>) {
 const ChannelRowSchema = z.object({
   channel_id: z.number(),
   channel_name: z.string(),
+  channel_type: z.string().optional(), // 'P' = Presencial, 'D' = Delivery
+  store_id: z.number().nullable().optional(),
+  store_name: z.string().nullable().optional(),
+  channel_store_key: z.string(),
 });
 
 export type ChannelRow = z.infer<typeof ChannelRowSchema>;

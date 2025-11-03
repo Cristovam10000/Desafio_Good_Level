@@ -8,6 +8,7 @@ import { Input } from "@/shared/ui/input";
 import { Calendar, BarChart3, Lightbulb } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useChannelSelection } from "@/shared/hooks/useChannelSelection";
 import { IsoRange } from "@/shared/lib/date";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPaymentsMix, fetchNetVsGross, fetchChannels, fetchSectionInsights } from "@/shared/api/sections";
@@ -50,7 +51,6 @@ export default function FinanceiroPage() {
   const { isAuthenticated, isReady } = useRequireAuth();
   const [period, setPeriod] = useState<PeriodOption>("30days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("30days"));
-  const [channelOption, setChannelOption] = useState<number | null>(null);
   const [showAllPeriod, setShowAllPeriod] = useState(false);
 
   const displayRange = useMemo<IsoRange>(() => {
@@ -87,38 +87,49 @@ export default function FinanceiroPage() {
     queryFn: fetchChannels,
   });
 
+  const {
+    selection: channelSelection,
+    handleSelect: handleChannelSelect,
+    channelKey,
+    channelId: selectedChannelId,
+    storeId: selectedStoreId,
+  } = useChannelSelection(channelsQuery.data);
+
   // Fetch payments mix
   const paymentsMixQuery = useQuery({
-    queryKey: ["finance", "payments-mix", displayRange, channelOption],
+    queryKey: ["finance", "payments-mix", displayRange, channelKey],
     queryFn: () =>
       fetchPaymentsMix({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch net vs gross
   const netVsGrossQuery = useQuery({
-    queryKey: ["finance", "net-vs-gross", displayRange, channelOption],
+    queryKey: ["finance", "net-vs-gross", displayRange, channelKey],
     queryFn: () =>
       fetchNetVsGross({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch insights
   const insightsQuery = useQuery({
-    queryKey: ["insights", "financeiro", displayRange, channelOption],
+    queryKey: ["insights", "financeiro", displayRange, channelKey],
     queryFn: () =>
       fetchSectionInsights("financeiro", {
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
@@ -206,20 +217,21 @@ export default function FinanceiroPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={channelOption?.toString() || "all"}
-                onValueChange={(v) => setChannelOption(v === "all" ? null : Number(v))}
-              >
-                <SelectTrigger className="w-[180px]">
+              <Select value={channelSelection?.key ?? "all"} onValueChange={handleChannelSelect}>
+                <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder="Todos os canais" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os canais</SelectItem>
-                  {channelsQuery.data?.map((ch) => (
-                    <SelectItem key={ch.channel_id} value={ch.channel_id.toString()}>
-                      {ch.channel_name}
-                    </SelectItem>
-                  ))}
+                  {channelsQuery.data?.map((ch) => {
+                    const label = ch.store_name ? `${ch.channel_name} - ${ch.store_name}` : ch.channel_name;
+                    const key = ch.channel_store_key ?? `${ch.channel_id}:${ch.store_id}`;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

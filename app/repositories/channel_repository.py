@@ -18,14 +18,31 @@ class ChannelRepository:
     def get_all(store_ids: Optional[Sequence[int]] = None) -> list[dict]:
         """
         Obtém lista de todos os canais de venda.
-        Retorna todos os canais independente do filtro de lojas para melhor performance.
+        Ordenados por canal (alfabético) e depois por loja (alfabético).
+        Isso agrupa os mesmos canais juntos, facilitando a navegação.
         
         Returns:
-            Lista de canais com id e nome
+            Lista de canais com id, nome, tipo e loja associada.
         """
-        # Simplificado: retorna todos os canais sem JOIN com sales (muito mais rápido)
-        query = "SELECT id, name FROM channels ORDER BY name"
-        return fetch_all(query, None, timeout_ms=2000)
+        base_query = """
+            SELECT DISTINCT
+                c.id AS channel_id,
+                c.name AS channel_name,
+                c.type AS channel_type,
+                s.id AS store_id,
+                s.name AS store_name,
+                (c.id::text || ':' || s.id::text) AS channel_store_key
+            FROM sales sa
+            JOIN channels c ON c.id = sa.channel_id
+            JOIN stores s ON s.id = sa.store_id
+        """
+        params: dict | None = None
+        if store_ids:
+            base_query += " WHERE sa.store_id = ANY(:store_ids)"
+            params = {"store_ids": list(store_ids)}
+        # Ordenar por canal primeiro (agrupa canais iguais), depois por loja
+        base_query += " ORDER BY c.name, s.name"
+        return fetch_all(base_query, params, timeout_ms=2000)
     
     @staticmethod
     def get_by_name(name: str) -> dict | None:

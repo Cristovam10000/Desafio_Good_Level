@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Calendar, Clock, BarChart3, Lightbulb } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useChannelSelection } from "@/shared/hooks/useChannelSelection";
 import { IsoRange } from "@/shared/lib/date";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -58,7 +59,6 @@ export default function EntregasPage() {
   const { isAuthenticated, isReady } = useRequireAuth();
   const [period, setPeriod] = useState<PeriodOption>("30days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("30days"));
-  const [channelOption, setChannelOption] = useState<number | null>(null);
   const [showAllPeriod, setShowAllPeriod] = useState(false);
 
   const displayRange = useMemo<IsoRange>(() => {
@@ -94,38 +94,62 @@ export default function EntregasPage() {
     queryFn: fetchChannels,
   });
 
+  // Filtrar canais removendo apenas os presenciais puros (Balcão, etc.)
+  // Mantém App Próprio pois também faz entregas
+  const deliveryChannels = useMemo(() => {
+    if (!channelsQuery.data) return [];
+    // Lista de canais PRESENCIAIS que devem ser removidos
+    const presencialNames = ['balcão', 'presencial', 'loja física', 'salão'];
+    return channelsQuery.data.filter(ch => {
+      const channelNameLower = ch.channel_name.toLowerCase();
+      // Remove apenas se o nome estiver na lista de presenciais
+      return !presencialNames.some(name => channelNameLower.includes(name));
+    });
+  }, [channelsQuery.data]);
+
+  const {
+    selection: channelSelection,
+    handleSelect: handleChannelSelect,
+    channelKey,
+    channelId: selectedChannelId,
+    storeId: selectedStoreId,
+  } = useChannelSelection(deliveryChannels);
+
   // Fetch delivery percentiles
   const percentilesQuery = useQuery({
-    queryKey: ["delivery", "percentiles", displayRange, channelOption],
+    queryKey: ["delivery", "percentiles", displayRange, channelKey],
     queryFn: () =>
       fetchDeliveryPercentiles({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch delivery stats
   const statsQuery = useQuery({
-    queryKey: ["delivery", "stats", displayRange, channelOption],
+    queryKey: ["delivery", "stats", displayRange, channelKey],
     queryFn: () =>
       fetchDeliveryStats({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch cities ranking
   const citiesRankQuery = useQuery({
-    queryKey: ["delivery", "cities-rank", displayRange, channelOption],
+    queryKey: ["delivery", "cities-rank", displayRange, channelKey],
     queryFn: () =>
       fetchDeliveryCitiesRank({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 10,
       }),
     enabled: isAuthenticated,
@@ -133,12 +157,13 @@ export default function EntregasPage() {
 
   // Fetch stores ranking (slowest)
   const storesSlowQuery = useQuery({
-    queryKey: ["delivery", "stores-slow", displayRange, channelOption],
+    queryKey: ["delivery", "stores-slow", displayRange, channelKey],
     queryFn: () =>
       fetchDeliveryStoresRank({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         order_by: "slowest",
         limit: 10,
       }),
@@ -147,12 +172,13 @@ export default function EntregasPage() {
 
   // Fetch stores ranking (fastest)
   const storesFastQuery = useQuery({
-    queryKey: ["delivery", "stores-fast", displayRange, channelOption],
+    queryKey: ["delivery", "stores-fast", displayRange, channelKey],
     queryFn: () =>
       fetchDeliveryStoresRank({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         order_by: "fastest",
         limit: 10,
       }),
@@ -161,12 +187,13 @@ export default function EntregasPage() {
 
   // Fetch AI insights for Entregas section
   const insightsQuery = useQuery({
-    queryKey: ["insights", "entregas", displayRange, channelOption],
+    queryKey: ["insights", "entregas", displayRange, channelKey],
     queryFn: () =>
       fetchSectionInsights("entregas", {
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
     staleTime: 1000 * 60 * 5, // 5 minutos
@@ -273,20 +300,21 @@ export default function EntregasPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={channelOption?.toString() || "all"}
-                onValueChange={(v) => setChannelOption(v === "all" ? null : Number(v))}
-              >
-                <SelectTrigger className="w-[180px]">
+              <Select value={channelSelection?.key ?? "all"} onValueChange={handleChannelSelect}>
+                <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder="Todos os canais" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os canais</SelectItem>
-                  {channelsQuery.data?.map((ch) => (
-                    <SelectItem key={ch.channel_id} value={ch.channel_id.toString()}>
-                      {ch.channel_name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">Todos os canais de delivery</SelectItem>
+                  {deliveryChannels?.map((ch) => {
+                    const label = ch.store_name ? `${ch.channel_name} - ${ch.store_name}` : ch.channel_name;
+                    const key = ch.channel_store_key ?? `${ch.channel_id}:${ch.store_id}`;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

@@ -150,15 +150,21 @@ export default function DashboardPage() {
     if (!channelFilter) {
       return "all";
     }
-    const ids = [...channelFilter.ids].sort((a, b) => a - b);
-    return `group-${ids.join("-")}`;
+    return channelFilter.key;
   }, [channelFilter]);
 
   const channelIdsParam = useMemo(() => {
     if (!channelFilter) {
       return undefined;
     }
-    return channelFilter.ids.join(",");
+    return String(channelFilter.channelId);
+  }, [channelFilter]);
+
+  const storeIdsParam = useMemo(() => {
+    if (!channelFilter || channelFilter.storeId == null) {
+      return undefined;
+    }
+    return String(channelFilter.storeId);
   }, [channelFilter]);
 
   const handleRefresh = useCallback(() => {
@@ -176,11 +182,13 @@ export default function DashboardPage() {
         start: apiRange.start,
         end: apiRange.end,
         channel_ids: channelIdsParam,
+        store_id: storeIdsParam,
       });
       return fetchMetrics({
         start: apiRange.start,
         end: apiRange.end,
         ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+        ...(storeIdsParam ? { store_id: Number(storeIdsParam) } : {}),
       });
     },
     enabled: isAuthenticated && isReady,
@@ -197,6 +205,7 @@ export default function DashboardPage() {
         start: previousApiRange.start,
         end: previousApiRange.end,
         ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+        ...(storeIdsParam ? { store_id: Number(storeIdsParam) } : {}),
       });
     },
     enabled: isAuthenticated && isReady,
@@ -214,6 +223,7 @@ export default function DashboardPage() {
         start: apiRange.start,
         end: apiRange.end,
         ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+        ...(storeIdsParam ? { store_id: Number(storeIdsParam) } : {}),
       });
     },
     enabled: isAuthenticated && isReady,
@@ -229,6 +239,7 @@ export default function DashboardPage() {
         start: dtRange.start,
         end: dtRange.end,
         ...(channelIdsParam ? { channel_ids: channelIdsParam } : {}),
+        ...(storeIdsParam ? { store_id: Number(storeIdsParam) } : {}),
       });
     },
     enabled: isAuthenticated && isReady,
@@ -270,24 +281,22 @@ export default function DashboardPage() {
   }, [dataRangeQuery.data, setPeriod, setCustomRange]);
 
   const channelOptions = useMemo<ChannelFilterOption[]>(() => {
-    const groups = new Map<string, ChannelFilterOption>();
-    channelsQuery.data?.forEach((channel) => {
-      const key = channel.name.trim().toLowerCase();
-      const existing = groups.get(key);
-      if (existing) {
-        existing.ids.push(channel.id);
-        existing.count += 1;
-        existing.label = channel.name; // keep latest formatting (with accents)
-      } else {
-        groups.set(key, {
-          key,
-          label: channel.name,
-          ids: [channel.id],
-          count: 1,
-        });
-      }
-    });
-    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+    if (!channelsQuery.data) {
+      return [];
+    }
+    return channelsQuery.data
+      .map((channel) => {
+        const label = channel.store_name ? `${channel.channel_name} - ${channel.store_name}` : channel.channel_name;
+        return {
+          key: channel.channel_store_key ?? `${channel.channel_id}:${channel.store_id}`,
+          label,
+          channelId: channel.channel_id,
+          storeId: channel.store_id ?? null,
+          storeName: channel.store_name ?? "",
+          channelName: channel.channel_name,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
   }, [channelsQuery.data]);
 
   useEffect(() => {
@@ -422,10 +431,14 @@ export default function DashboardPage() {
     const totals = new Map<string, { id: string; name: string; value: number }>();
     salesHourQuery.data?.forEach((row) => {
       if (row.channel_id == null) return;
-      const channel = channelsQuery.data?.find((ch) => ch.id === row.channel_id);
-      const name = channel?.name ?? `Canal ${row.channel_id}`;
-      const key = name.toLowerCase();
-      const current = totals.get(key) ?? { id: String(row.channel_id), name, value: 0 };
+      const channel = channelsQuery.data?.find(
+        (ch) =>
+          ch.channel_id === row.channel_id &&
+          (row.store_id == null || ch.store_id === row.store_id)
+      );
+      const name = channel?.store_name ? `${channel.channel_name} - ${channel.store_name}` : channel?.channel_name ?? `Canal ${row.channel_id}`;
+      const key = channel?.channel_store_key ?? `${row.channel_id}:${row.store_id ?? "all"}`;
+      const current = totals.get(key) ?? { id: key, name, value: 0 };
       totals.set(key, {
         id: current.id,
         name,

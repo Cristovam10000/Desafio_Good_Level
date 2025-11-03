@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.domain.filters import DataFilters
 from app.domain.models import DeliveryMetrics, CityDeliveryMetrics
-from app.repositories.delivery_repository import DeliveryRepository
+from app.repositories.protocols import DeliveryRepositoryProtocol
 
 
 class DeliveryService:
@@ -72,6 +72,7 @@ class DeliveryService:
         start: datetime,
         end: datetime,
         store_ids: Optional[list[int]] = None,
+        channel_ids: Optional[list[int]] = None,
         city: Optional[str] = None,
         limit: int = 50,
     ) -> list[dict]:
@@ -80,6 +81,7 @@ class DeliveryService:
             start_date=start,
             end_date=end,
             store_ids=store_ids,
+            channel_ids=channel_ids,
         )
         return self.repository.get_regions(filters, city, limit)
 
@@ -88,6 +90,7 @@ class DeliveryService:
         start: datetime,
         end: datetime,
         store_ids: Optional[list[int]] = None,
+        channel_ids: Optional[list[int]] = None,
         sla_minutes: int = 45,
     ) -> dict:
         """Get delivery time percentiles."""
@@ -95,6 +98,7 @@ class DeliveryService:
             start_date=start,
             end_date=end,
             store_ids=store_ids,
+            channel_ids=channel_ids,
         )
         return self.repository.get_percentiles(filters, sla_minutes)
 
@@ -103,12 +107,14 @@ class DeliveryService:
         start: datetime,
         end: datetime,
         store_ids: Optional[list[int]] = None,
+        channel_ids: Optional[list[int]] = None,
     ) -> dict:
         """Get general delivery statistics."""
         filters = DataFilters(
             start_date=start,
             end_date=end,
             store_ids=store_ids,
+            channel_ids=channel_ids,
         )
         return self.repository.get_stats(filters)
 
@@ -117,6 +123,7 @@ class DeliveryService:
         start: datetime,
         end: datetime,
         store_ids: Optional[list[int]] = None,
+        channel_ids: Optional[list[int]] = None,
         limit: int = 10,
     ) -> list[dict]:
         """Get delivery performance ranking by store."""
@@ -124,5 +131,6 @@ class DeliveryService:
             start_date=start,
             end_date=end,
             store_ids=store_ids,
+            channel_ids=channel_ids,
         )
         return self.repository.get_stores_rank(filters, limit)

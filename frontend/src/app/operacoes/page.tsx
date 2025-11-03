@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Calendar, Clock, BarChart3, Lightbulb } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useChannelSelection } from "@/shared/hooks/useChannelSelection";
 import { IsoRange } from "@/shared/lib/date";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPrepTime, fetchCancellations, fetchChannels, fetchSectionInsights } from "@/shared/api/sections";
@@ -52,7 +53,6 @@ export default function OperacoesPage() {
   const { isAuthenticated, isReady } = useRequireAuth();
   const [period, setPeriod] = useState<PeriodOption>("30days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("30days"));
-  const [channelOption, setChannelOption] = useState<number | null>(null);
   const [showAllPeriod, setShowAllPeriod] = useState(false);
 
   const displayRange = useMemo<IsoRange>(() => {
@@ -88,14 +88,23 @@ export default function OperacoesPage() {
     queryFn: fetchChannels,
   });
 
+  const {
+    selection: channelSelection,
+    handleSelect: handleChannelSelect,
+    channelKey,
+    channelId: selectedChannelId,
+    storeId: selectedStoreId,
+  } = useChannelSelection(channelsQuery.data);
+
   // Fetch prep time by store
   const prepTimeQuery = useQuery({
-    queryKey: ["ops", "prep-time", displayRange, channelOption],
+    queryKey: ["ops", "prep-time", displayRange, channelKey],
     queryFn: () =>
       fetchPrepTime({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 20,
       }),
     enabled: isAuthenticated,
@@ -103,24 +112,26 @@ export default function OperacoesPage() {
 
   // Fetch cancellations timeline
   const cancellationsQuery = useQuery({
-    queryKey: ["ops", "cancellations", displayRange, channelOption],
+    queryKey: ["ops", "cancellations", displayRange, channelKey],
     queryFn: () =>
       fetchCancellations({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
   });
 
   // Fetch AI insights for Operações section
   const insightsQuery = useQuery({
-    queryKey: ["insights", "operacoes", displayRange, channelOption],
+    queryKey: ["insights", "operacoes", displayRange, channelKey],
     queryFn: () =>
       fetchSectionInsights("operacoes", {
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -230,20 +241,21 @@ export default function OperacoesPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={channelOption?.toString() || "all"}
-                onValueChange={(v) => setChannelOption(v === "all" ? null : Number(v))}
-              >
-                <SelectTrigger className="w-[180px]">
+              <Select value={channelSelection?.key ?? "all"} onValueChange={handleChannelSelect}>
+                <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder="Todos os canais" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os canais</SelectItem>
-                  {channelsQuery.data?.map((ch) => (
-                    <SelectItem key={ch.channel_id} value={ch.channel_id.toString()}>
-                      {ch.channel_name}
-                    </SelectItem>
-                  ))}
+                  {channelsQuery.data?.map((ch) => {
+                    const label = ch.store_name ? `${ch.channel_name} - ${ch.store_name}` : ch.channel_name;
+                    const key = ch.channel_store_key ?? `${ch.channel_id}:${ch.store_id}`;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

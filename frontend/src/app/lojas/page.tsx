@@ -3,6 +3,7 @@
 import { Navbar } from "@/widgets/layout/Navbar";
 import { useState, useMemo, useCallback } from "react";
 import { useRequireAuth } from "@/shared/hooks/useRequireAuth";
+import { useChannelSelection } from "@/shared/hooks/useChannelSelection";
 import { IsoRange } from "@/shared/lib/date";
 import { useQuery } from "@tanstack/react-query";
 import { fetchStoresTop, fetchChannels, fetchSectionInsights } from "@/shared/api/sections";
@@ -50,7 +51,6 @@ export default function LojasPage() {
   const { isAuthenticated, isReady } = useRequireAuth();
   const [period, setPeriod] = useState<PeriodOption>("30days");
   const [customRange, setCustomRange] = useState<IsoRange>(() => rangeForPreset("30days"));
-  const [channelOption, setChannelOption] = useState<number | null>(null);
   const [showAllPeriod, setShowAllPeriod] = useState(false);
 
   const displayRange = useMemo<IsoRange>(() => {
@@ -87,14 +87,23 @@ export default function LojasPage() {
     queryFn: fetchChannels,
   });
 
+  const {
+    selection: channelSelection,
+    handleSelect: handleChannelSelect,
+    channelKey,
+    channelId: selectedChannelId,
+    storeId: selectedStoreId,
+  } = useChannelSelection(channelsQuery.data);
+
   // Fetch stores ranking
   const storesQuery = useQuery({
-    queryKey: ["stores", "top", displayRange, channelOption],
+    queryKey: ["stores", "top", displayRange, channelKey],
     queryFn: () =>
       fetchStoresTop({
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
         limit: 20,
       }),
     enabled: isAuthenticated,
@@ -102,20 +111,27 @@ export default function LojasPage() {
 
   // Fetch insights
   const insightsQuery = useQuery({
-    queryKey: ["insights", "lojas", displayRange, channelOption],
+    queryKey: ["insights", "lojas", displayRange, channelKey],
     queryFn: () =>
       fetchSectionInsights("lojas", {
         start: displayRange.start,
         end: displayRange.end,
-        ...(channelOption ? { channel_id: channelOption } : {}),
+        ...(selectedChannelId ? { channel_id: selectedChannelId } : {}),
+        ...(selectedStoreId != null ? { store_id: selectedStoreId } : {}),
       }),
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
 
   // Calculate KPIs from stores data
+  const filteredStores = useMemo(() => {
+    if (!storesQuery.data) return [];
+    if (selectedStoreId == null) return storesQuery.data;
+    return storesQuery.data.filter((store) => store.store_id === selectedStoreId);
+  }, [storesQuery.data, selectedStoreId]);
+
   const kpis = useMemo(() => {
-    if (!storesQuery.data || storesQuery.data.length === 0) {
+    if (filteredStores.length === 0) {
       return {
         totalRevenue: 0,
         totalOrders: 0,
@@ -125,9 +141,9 @@ export default function LojasPage() {
       };
     }
 
-    const totalRevenue = storesQuery.data.reduce((sum, s) => sum + s.revenue, 0);
-    const totalOrders = storesQuery.data.reduce((sum, s) => sum + s.orders, 0);
-    const totalCancelled = storesQuery.data.reduce((sum, s) => sum + s.cancelled, 0);
+    const totalRevenue = filteredStores.reduce((sum, s) => sum + s.revenue, 0);
+    const totalOrders = filteredStores.reduce((sum, s) => sum + s.orders, 0);
+    const totalCancelled = filteredStores.reduce((sum, s) => sum + s.cancelled, 0);
     const avgTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
     
     // Calculate weighted average cancellation rate
@@ -137,18 +153,18 @@ export default function LojasPage() {
       : 0;
 
     return { totalRevenue, totalOrders, avgTicket, totalCancelled, avgCancellationRate };
-  }, [storesQuery.data]);
+  }, [filteredStores]);
 
   // Transform data for ranking chart
   const chartData = useMemo(() => {
-    if (!storesQuery.data) return [];
-    return storesQuery.data.slice(0, 10).map((s) => ({
+    if (filteredStores.length === 0) return [];
+    return filteredStores.slice(0, 10).map((s) => ({
       name: s.store_name,
       value: s.revenue,
       orders: s.orders,
       ticket: s.avg_ticket,
     }));
-  }, [storesQuery.data]);
+  }, [filteredStores]);
 
   if (!isReady) {
     return (
@@ -215,20 +231,21 @@ export default function LojasPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <Select
-                value={channelOption?.toString() || "all"}
-                onValueChange={(v) => setChannelOption(v === "all" ? null : Number(v))}
-              >
-                <SelectTrigger className="w-[180px]">
+              <Select value={channelSelection?.key ?? "all"} onValueChange={handleChannelSelect}>
+                <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder="Todos os canais" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os canais</SelectItem>
-                  {channelsQuery.data?.map((ch) => (
-                    <SelectItem key={ch.channel_id} value={ch.channel_id.toString()}>
-                      {ch.channel_name}
-                    </SelectItem>
-                  ))}
+                  {channelsQuery.data?.map((ch) => {
+                    const label = ch.store_name ? `${ch.channel_name} - ${ch.store_name}` : ch.channel_name;
+                    const key = ch.channel_store_key ?? `${ch.channel_id}:${ch.store_id}`;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

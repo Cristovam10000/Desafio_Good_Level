@@ -12,8 +12,10 @@ export type PeriodOption = "today" | "7days" | "30days" | "90days" | "custom";
 export type ChannelFilterOption = {
   key: string;
   label: string;
-  ids: number[];
-  count: number;
+  channelId: number;
+  storeId: number | null;
+  storeName: string;
+  channelName: string;
 };
 
 type FilterPanelProps = {
@@ -116,7 +118,7 @@ export default function FilterPanel({
             }}
             disabled={isChannelLoading}
           >
-            <SelectTrigger className="w-[200px] bg-background text-sm h-10">
+            <SelectTrigger className="w-[260px] bg-background text-sm h-10 truncate">
               <div className="flex items-center gap-2">
                 <Store className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 <SelectValue placeholder="Todos os canais" />
@@ -126,12 +128,7 @@ export default function FilterPanel({
               <SelectItem value="all">Todos os canais</SelectItem>
               {channels.map((channel) => (
                 <SelectItem key={channel.key} value={channel.key}>
-                  <span className="flex items-center gap-2">
-                    <span>{channel.label}</span>
-                    {channel.count > 1 && (
-                      <span className="text-[10px] text-muted-foreground bg-muted/70 rounded px-1">{channel.count}</span>
-                    )}
-                  </span>
+                  <span className="truncate max-w-[220px] inline-block">{channel.label}</span>
                 </SelectItem>
               ))}
             </SelectContent>
