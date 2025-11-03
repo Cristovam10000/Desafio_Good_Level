@@ -7,7 +7,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 from decimal import Decimal
 
-GEMINI_API_KEY = "AIzaSyBztS5Cgz_b9T1BvCfhLwM3OXJECn6soRk"
+from app.core.config import settings
+
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
 
 
@@ -184,7 +185,7 @@ Foque em: mix de pagamentos, receita líquida vs bruta, taxas e comissões, opor
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:  # Aumentado para 60s
             response = await client.post(
-                f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+                f"{GEMINI_API_URL}?key={settings.GOOGLE_API_KEY}",
                 json={
                     "contents": [{
                         "parts": [{
@@ -345,7 +346,7 @@ Seja específico com datas, valores e percentuais. Use os dados reais para funda
         logger.info("[detect_anomalies] Chamando API Gemini...")
         async with httpx.AsyncClient(timeout=90.0) as client:  # Mais tempo para anomalias
             response = await client.post(
-                f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+                f"{GEMINI_API_URL}?key={settings.GOOGLE_API_KEY}",
                 json={
                     "contents": [{
                         "parts": [{
