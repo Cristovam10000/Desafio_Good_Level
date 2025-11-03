@@ -93,7 +93,10 @@ services:
       JWT_SECRET: coloque_um_grande_aqui_____________________________
       JWT_REFRESH_SECRET: outro_grande________________________________
       JWT_SHARE_SECRET: outro_mais___________________________________
-      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      CORS_ORIGINS: https://cristovam.space,https://www.cristovam.space
+      CORS_ALLOW_CREDENTIALS: "true"
+      CORS_ALLOW_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+      CORS_ALLOW_HEADERS: "Authorization,Content-Type"
       CACHE_MAX_AGE: "60"
       CACHE_SWR: "300"
       ENV: development
