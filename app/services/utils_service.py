@@ -21,12 +21,21 @@ class UtilsService:
             FROM sales
         """
         result = fetch_all(sql, timeout_ms=5000)
-        if result:
-            return {
-                "min_date": result[0]["min_date"],
-                "max_date": result[0]["max_date"],
-            }
-        return {"min_date": None, "max_date": None}
+        # If the query returned a row with non-null dates, parse them to
+        # datetime objects so they match the expected response model.
+        if result and result[0].get("min_date") and result[0].get("max_date"):
+            try:
+                # created_at was cast to text in the query; parse ISO string
+                min_dt = datetime.fromisoformat(result[0]["min_date"])
+                max_dt = datetime.fromisoformat(result[0]["max_date"])
+                return {"min_date": min_dt, "max_date": max_dt}
+            except Exception:
+                # If parsing fails, fall back to returning None so router
+                # can treat it as no-data and return 404.
+                return None
+
+        # No data available in the sales table
+        return None
 
     @staticmethod
     def refresh_materialized_views() -> dict:
