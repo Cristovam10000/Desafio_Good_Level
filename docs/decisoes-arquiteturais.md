@@ -5,7 +5,6 @@ Este registro consolida as principais decisoes arquiteturais do projeto Nola Ana
 ---
 
 ## ADR-001: Camadas Dominio -> Servico -> Repositorio no backend
-- **Status:** Aceita (2025-11-03)
 
 ### Contexto
 O backend precisava isolar modelos de negocio das dependencias externas (banco relacional, HTTP, IA) enquanto mantinha reuso de filtros e regras entre dominios (vendas, entregas, produtos). O desafio original era um monolito de rotas direto no FastAPI, com SQL e regras espalhadas.
@@ -54,7 +53,7 @@ Implementar `ApplicationBuilder` que encadeia metodos explicitos para cada preoc
 ---
 
 ## ADR-003: Uso de Cube.js + CubeStore como camada semantica
-- **Status:** Aceita (2025-11-03)
+
 
 ### Contexto
 Consultas agregadas sobre vendas, canais e lojas apresentavam alta latencia quando executadas diretamente sobre tabelas transacionais. Era necessario fornecer pre-aggregacoes reutilizaveis e cache multi-instancia.
@@ -79,7 +78,7 @@ Introduzir Cube.js com CubeStore via Docker Compose (`docker/docker-compose.yml:
 ---
 
 ## ADR-004: Insights e detecao de anomalias com Google Gemini
-- **Status:** Aceita (2025-11-03)
+
 
 ### Contexto
 Stakeholders desejavam narrativas e alertas inteligentes sem construir regras estatisticas manualmente. Havia requisito de baixa latencia e custo controlado.
@@ -104,7 +103,6 @@ Integrar Google Gemini 2.0 Flash via LangChain para insights (`app/services/ai_i
 ---
 
 ## ADR-005: Cache HTTP com ETag e stale-while-revalidate
-- **Status:** Aceita (2025-11-03)
 
 ### Contexto
 APIs de analytics servem respostas pesadas e relativamente estaveis. Precisavamos reduzir carga no banco e acelerar navegacao sem introduzir Redis ou outra camada externa.
@@ -129,7 +127,7 @@ Criar helper `etag_json` que gera resposta deterministica com ETag, `Cache-Contr
 ---
 
 ## ADR-006: Autenticacao JWT com escopo por papel e loja
-- **Status:** Aceita (2025-11-03)
+
 
 ### Contexto
 Painel precisa limitar acesso por papel (viewer, analyst, manager, admin) e por lojas autorizadas, incluindo compartilhamento seguro de consultas.
@@ -154,7 +152,7 @@ Emitir tokens JWT contendo roles e IDs de lojas (`app/core/security.py:34`, `app
 ---
 
 ## ADR-007: Next.js App Router com TanStack Query e validacao via Zod
-- **Status:** Aceita (2025-11-03)
+
 
 ### Contexto
 Frontend precisava entregar dashboards ricos por dominio mantendo SSR/SSG opcionais e controle de estado de requisicoes. Versoes anteriores com CRA dificultavam modularizacao e code-splitting.
